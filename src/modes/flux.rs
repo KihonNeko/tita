@@ -3,6 +3,7 @@
 use crate::app::{Ctx, Nav, Screen, Summary};
 use crate::audio::PlaySpan;
 use crate::data;
+use crate::i18n::t;
 use crate::morse::{self, Timing};
 use crate::picker;
 use crate::stats::Stats;
@@ -345,7 +346,7 @@ impl Flux {
 
     fn summary(&self, now: Instant) -> Summary {
         Summary {
-            mode: "Flux".into(),
+            mode: t("Flux", "Stream").into(),
             elapsed: now.saturating_duration_since(self.started),
             total: self.total,
             correct: self.correct,
@@ -353,28 +354,49 @@ impl Flux {
             can_unlock: true,
             misses: self.misses.clone(),
             notes: vec![
-                format!("Vitesse max {:.0} mots/min (effective)", self.adapt.peak),
-                format!("Série max   {}", self.best_streak),
+                crate::tr!(
+                    "Vitesse max {:.0} mots/min (effective)",
+                    "Top speed   {:.0} wpm (effective)",
+                    self.adapt.peak
+                ),
+                crate::tr!("Série max   {}", "Best streak {}", self.best_streak),
             ],
         }
     }
 
     fn draw_ready(&self, f: &mut Frame, ctx: &Ctx) {
-        let area = ui::frame(f, "Flux", &[("Entrée", "commencer"), ("Échap", "retour")]);
+        let area = ui::frame(
+            f,
+            t("Flux", "Stream"),
+            &[(t("Entrée", "Enter"), t("commencer", "start")), (t("Échap", "Esc"), t("retour", "back"))],
+        );
         let chars: String = ctx.chars().iter().map(|c| format!("{c} ")).collect();
         let lines = vec![
-            Line::styled("Prêt ?", bold(ui::ACCENT)),
+            Line::styled(t("Prêt ?", "Ready?"), bold(ui::ACCENT)),
             Line::raw(""),
-            Line::raw("Le flux ne s'arrête jamais et ne t'attend pas : tape chaque caractère dès que tu l'entends."),
-            Line::raw("Ne t'arrête pas sur une lettre ratée, raccroche la suivante."),
+            Line::raw(t(
+                "Le flux ne s'arrête jamais et ne t'attend pas : tape chaque caractère dès que tu l'entends.",
+                "The stream never stops and does not wait for you: type each character as soon as you hear it.",
+            )),
+            Line::raw(t(
+                "Ne t'arrête pas sur une lettre ratée, raccroche la suivante.",
+                "Don't dwell on a missed letter, catch the next one.",
+            )),
             Line::raw(""),
-            Line::styled("La vitesse monte quand tu suis, redescend quand tu décroches. Les espaces ne se tapent pas.", dim()),
+            Line::styled(
+                t(
+                    "La vitesse monte quand tu suis, redescend quand tu décroches. Les espaces ne se tapent pas.",
+                    "The speed goes up when you keep up, comes down when you fall behind. Spaces are not typed.",
+                ),
+                dim(),
+            ),
             Line::raw(""),
-            Line::from(vec![Span::styled("Caractères  ", dim()), Span::raw(chars)]),
+            Line::from(vec![Span::styled(t("Caractères  ", "Characters  "), dim()), Span::raw(chars)]),
             Line::from(vec![
-                Span::styled("Vitesse     ", dim()),
-                Span::raw(format!(
+                Span::styled(t("Vitesse     ", "Speed       "), dim()),
+                Span::raw(crate::tr!(
                     "départ à {:.0} mots/min, jusqu'à {:.0}",
+                    "starts at {:.0} wpm, up to {:.0}",
                     ctx.cfg.eff_wpm.min(ctx.cfg.char_wpm),
                     ctx.cfg.char_wpm
                 )),
@@ -386,11 +408,11 @@ impl Flux {
 
     fn draw_running(&self, f: &mut Frame) {
         let now = Instant::now();
-        let area = ui::frame(f, "Flux", &[("Échap", "terminer")]);
+        let area = ui::frame(f, t("Flux", "Stream"), &[(t("Échap", "Esc"), t("terminer", "finish"))]);
 
         let mut speed = vec![
-            Span::styled("Vitesse ", dim()),
-            Span::styled(format!("{:.0} mots/min", self.adapt.eff), bold(Color::White)),
+            Span::styled(t("Vitesse ", "Speed "), dim()),
+            Span::styled(crate::tr!("{:.0} mots/min", "{:.0} wpm", self.adapt.eff), bold(Color::White)),
         ];
         match self.last_change {
             Some((dir, at)) if now.saturating_duration_since(at).as_secs() < ARROW_SECS => {
@@ -403,17 +425,18 @@ impl Flux {
             _ => {}
         }
         let acc = match self.adapt.accuracy() {
-            Some(a) => Span::styled(format!("{:.0} %", a * 100.0), bold(acc_color(a))),
+            Some(a) => Span::styled(crate::tr!("{:.0} %", "{:.0}%", a * 100.0), bold(acc_color(a))),
             None => Span::styled("—", dim()),
         };
         let stats = Line::from(vec![
-            Span::styled("Précision ", dim()),
+            Span::styled(t("Précision ", "Accuracy "), dim()),
             acc,
-            Span::styled("   Série ", dim()),
+            Span::styled(t("   Série ", "   Streak "), dim()),
             Span::styled(self.streak.to_string(), bold(Color::White)),
             Span::styled(
-                format!(
+                crate::tr!(
                     "   {}   {} caractères",
+                    "   {}   {} characters",
                     ui::mmss(now.saturating_duration_since(self.started).as_secs()),
                     self.total
                 ),
@@ -445,12 +468,15 @@ impl Flux {
             Line::from(band),
             Line::raw(""),
             Line::from(vec![
-                Span::styled("juste", Style::default().fg(ui::OK)),
+                Span::styled(t("juste", "right"), Style::default().fg(ui::OK)),
                 Span::styled(" · ", dim()),
-                Span::styled("faux", bold(ui::ERR)),
+                Span::styled(t("faux", "wrong"), bold(ui::ERR)),
                 Span::styled(" · ", dim()),
-                Span::styled("raté", Style::default().fg(ui::WARN)),
-                Span::styled("   Ne t'arrête pas, raccroche la suivante.", dim()),
+                Span::styled(t("raté", "missed"), Style::default().fg(ui::WARN)),
+                Span::styled(
+                    t("   Ne t'arrête pas, raccroche la suivante.", "   Don't stop, catch the next one."),
+                    dim(),
+                ),
             ]),
         ];
         f.render_widget(Paragraph::new(lines), ui::centered(area, 60, 6));
@@ -753,5 +779,34 @@ mod tests {
         }
         let s = render_to_string(&mut fl, &ctx, 80, 24);
         assert!(s.contains("mots/min") && s.contains("100 %") && s.contains("1 caractères"), "{s}");
+    }
+
+    #[test]
+    fn english_interface() {
+        crate::i18n::set(crate::config::Lang::En);
+        let sizes = [(80, 24), (20, 6)];
+        let mut ctx = Ctx::test();
+        let mut fl = Flux::new();
+        let s = render_to_string(&mut fl, &ctx, 80, 24);
+        assert!(s.contains("Stream") && s.contains("Ready?") && s.contains("catch the next one"), "{s}");
+        assert!(s.contains("Spaces are not typed.") && s.contains("starts at") && s.contains("wpm, up to"), "{s}");
+        assert!(!s.contains("Flux") && !s.contains("Prêt") && !s.contains("mots/min") && !s.contains("Échap"), "{s}");
+        render_to_string(&mut fl, &ctx, 20, 6);
+
+        let mut fl = started(&mut ctx, 1);
+        let w = fl.tracker.waiting[0];
+        fl.key_at(key(KeyCode::Char(w.c)), &mut ctx, w.span.end);
+        let s = render_to_string(&mut fl, &ctx, 80, 24);
+        assert!(s.contains("wpm") && s.contains("Accuracy 100%") && s.contains("1 characters"), "{s}");
+        assert!(s.contains("right · wrong · missed   Don't stop, catch the next one."), "{s}");
+        assert!(!s.contains("Vitesse") && !s.contains("Précision") && !s.contains("raté") && !s.contains("juste"), "{s}");
+        for (w, h) in sizes {
+            render_to_string(&mut fl, &ctx, w, h);
+        }
+        let sum = fl.summary(Instant::now());
+        assert_eq!(sum.mode, "Stream");
+        assert!(sum.notes[0].starts_with("Top speed   ") && sum.notes[0].ends_with("wpm (effective)"));
+        assert_eq!(sum.notes[1], "Best streak 1");
+        crate::i18n::set(crate::config::Lang::Fr);
     }
 }

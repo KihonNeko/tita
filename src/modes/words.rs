@@ -5,6 +5,7 @@
 
 use crate::app::{Ctx, Nav, Screen, Summary};
 use crate::audio::PlaySpan;
+use crate::i18n::t;
 use crate::modes::headcopy;
 use crate::ui::{self, bold, dim};
 use crate::{data, morse, picker};
@@ -96,19 +97,19 @@ pub enum Kind {
 impl Kind {
     pub fn mode(self) -> &'static str {
         match self {
-            Kind::Words => "Mots",
-            Kind::HeadCopy => "Copie de tête",
-            Kind::Callsigns => "Radio – indicatifs",
-            Kind::Abbreviations => "Radio – abréviations",
+            Kind::Words => t("Mots", "Words"),
+            Kind::HeadCopy => t("Copie de tête", "Head copy"),
+            Kind::Callsigns => t("Radio – indicatifs", "Radio – callsigns"),
+            Kind::Abbreviations => t("Radio – abréviations", "Radio – abbreviations"),
         }
     }
 
     /// Nom de ce qu'on copie, pour les messages.
     fn unit(self) -> &'static str {
         match self {
-            Kind::Words | Kind::HeadCopy => "mots",
-            Kind::Callsigns => "indicatifs",
-            Kind::Abbreviations => "abréviations",
+            Kind::Words | Kind::HeadCopy => t("mots", "words"),
+            Kind::Callsigns => t("indicatifs", "callsigns"),
+            Kind::Abbreviations => t("abréviations", "abbreviations"),
         }
     }
 }
@@ -310,10 +311,19 @@ impl Words {
         let unit = self.kind.unit();
         let mut notes = Vec::new();
         if self.done > 0 {
-            notes.push(format!("{} {unit} justes sur {}", self.done_ok, self.done));
+            notes.push(crate::tr!(
+                "{} {unit} justes sur {}",
+                "{} of {} {unit} correct",
+                self.done_ok,
+                self.done
+            ));
         }
         if self.kind == Kind::HeadCopy {
-            notes.push(format!("Longueur atteinte : {} lettres", self.best_len));
+            notes.push(crate::tr!(
+                "Longueur atteinte : {} lettres",
+                "Length reached: {} letters",
+                self.best_len
+            ));
         }
         ctx.finish(Summary {
             mode: self.kind.mode().into(),
@@ -411,19 +421,31 @@ impl Screen for Words {
     }
 
     fn draw(&mut self, f: &mut Frame, ctx: &Ctx) {
-        let hints: &[(&str, &str)] = match self.phase {
-            Phase::Input => &[("Entrée", "valider"), ("Tab", "réécouter"), ("Échap", "terminer")],
-            Phase::Feedback { .. } => &[("Entrée", "suivant"), ("Échap", "terminer")],
+        let (enter, esc) = (t("Entrée", "Enter"), t("Échap", "Esc"));
+        let end = t("terminer", "finish");
+        let hints: Vec<(&str, &str)> = match self.phase {
+            Phase::Input => vec![
+                (enter, t("valider", "submit")),
+                ("Tab", t("réécouter", "replay")),
+                (esc, end),
+            ],
+            Phase::Feedback { .. } => vec![(enter, t("suivant", "next")), (esc, end)],
         };
-        let area = ui::frame(f, self.kind.mode(), hints);
+        let area = ui::frame(f, self.kind.mode(), &hints);
 
         let left = (ctx.cfg.session_secs as u64).saturating_sub(self.elapsed().as_secs());
-        let mut status = format!("Reste {} · {} {}", ui::mmss(left), self.done, self.kind.unit());
+        let mut status = crate::tr!(
+            "Reste {} · {} {}",
+            "{} left · {} {}",
+            ui::mmss(left),
+            self.done,
+            self.kind.unit()
+        );
         if let Some(acc) = self.tally.accuracy() {
             status.push_str(&format!(" · {:.0} %", acc * 100.0));
         }
         if self.kind == Kind::HeadCopy {
-            status.push_str(&format!(" · jusqu'à {} lettres", self.max_len));
+            status.push_str(&crate::tr!(" · jusqu'à {} lettres", " · up to {} letters", self.max_len));
         }
         let mut lines = vec![Line::styled(status, dim()), Line::raw("")];
 
@@ -431,11 +453,11 @@ impl Screen for Words {
         match self.phase {
             Phase::Input => {
                 let (msg, style) = if self.locked() {
-                    ("Écoute…", bold(ui::ACCENT))
+                    (t("Écoute…", "Listen…"), bold(ui::ACCENT))
                 } else if self.playing() {
-                    ("Écoute et tape au fil du son.", dim())
+                    (t("Écoute et tape au fil du son.", "Listen and type as you hear it."), dim())
                 } else {
-                    ("Tape ce que tu as entendu.", dim())
+                    (t("Tape ce que tu as entendu.", "Type what you heard."), dim())
                 };
                 lines.push(Line::styled(msg, style));
                 lines.push(Line::raw(""));
@@ -447,22 +469,25 @@ impl Screen for Words {
             }
             Phase::Feedback { ok, .. } => {
                 lines.push(if ok {
-                    Line::styled("Juste !", bold(ui::OK))
+                    Line::styled(t("Juste !", "Correct!"), bold(ui::OK))
                 } else {
-                    Line::styled("Raté. Réécoute en lisant :", bold(ui::ERR))
+                    Line::styled(
+                        t("Raté. Réécoute en lisant :", "Missed. Listen again while reading:"),
+                        bold(ui::ERR),
+                    )
                 });
                 lines.push(Line::raw(""));
                 lines.push(Line::from(vec![
-                    Span::styled("Attendu  ", dim()),
+                    Span::styled(t("Attendu  ", "Expected "), dim()),
                     Span::styled(expected.to_string(), bold(Color::White)),
                 ]));
-                let mut typed = vec![Span::styled("Tapé     ", dim())];
+                let mut typed = vec![Span::styled(t("Tapé     ", "Typed    "), dim())];
                 typed.extend(diff_spans(expected, &self.typed));
                 lines.push(Line::from(typed));
                 if let Some(m) = self.current.as_ref().and_then(|i| i.meaning) {
                     lines.push(Line::raw(""));
                     lines.push(Line::from(vec![
-                        Span::styled("Sens     ", dim()),
+                        Span::styled(t("Sens     ", "Meaning  "), dim()),
                         Span::styled(m, bold(ui::ACCENT)),
                     ]));
                 }
@@ -471,7 +496,10 @@ impl Screen for Words {
         if self.padded {
             lines.push(Line::raw(""));
             lines.push(Line::styled(
-                "Peu de mots possibles avec tes caractères : complété par des groupes au hasard.",
+                t(
+                    "Peu de mots possibles avec tes caractères : complété par des groupes au hasard.",
+                    "Few words possible with your characters: random groups fill the gaps.",
+                ),
                 dim(),
             ));
         }
@@ -662,6 +690,72 @@ mod tests {
         w.on_key(key(KeyCode::Enter), &mut ctx);
         w.skip_wait(&mut ctx);
         assert!(matches!(w.on_tick(&mut ctx), Nav::Replace(_)));
+    }
+
+    #[test]
+    fn english_interface() {
+        crate::i18n::set(crate::config::Lang::En);
+        // Mots : écoute, saisie, correction juste puis ratée, bilan.
+        let (mut w, mut ctx) = started(Kind::Words, 26);
+        let s = render_to_string(&mut w, &ctx, 80, 24);
+        assert!(s.contains("Words") && s.contains("Listen and type as you hear it."), "{s}");
+        assert!(s.contains("left · 0 words") && s.contains("Enter") && s.contains("replay"), "{s}");
+        for fr in ["Mots", "Reste", "Écoute", "Entrée", "Échap", "valider", "terminer"] {
+            assert!(!s.contains(fr), "{fr} : {s}");
+        }
+        w.skip_wait(&mut ctx);
+        assert!(render_to_string(&mut w, &ctx, 80, 24).contains("Type what you heard."));
+        let word = w.current_text();
+        type_text(&mut w, &mut ctx, &word);
+        w.on_key(key(KeyCode::Enter), &mut ctx);
+        let s = render_to_string(&mut w, &ctx, 80, 24);
+        assert!(s.contains("Correct!") && s.contains("Expected ") && s.contains("Typed "), "{s}");
+        assert!(s.contains("next") && !s.contains("Juste") && !s.contains("Attendu"), "{s}");
+        w.on_key(key(KeyCode::Enter), &mut ctx);
+        w.skip_wait(&mut ctx);
+        w.on_key(key(KeyCode::Enter), &mut ctx);
+        let s = render_to_string(&mut w, &ctx, 80, 24);
+        assert!(s.contains("Missed. Listen again while reading:") && !s.contains("Raté"), "{s}");
+        assert!(matches!(w.on_key(key(KeyCode::Esc), &mut ctx), Nav::Replace(_)));
+        assert_eq!(ctx.stats.sessions.last().unwrap().mode, "Words");
+
+        // Liste trop courte : l'avertissement tient sur 80 colonnes.
+        let (mut w, ctx) = started(Kind::Words, 2);
+        let s = render_to_string(&mut w, &ctx, 80, 24);
+        assert!(s.contains("random groups fill the gaps.") && !s.contains("hasard"), "{s}");
+
+        // Abréviations : le sens, en anglais, à la correction.
+        let (mut w, mut ctx) = started(Kind::Abbreviations, 41);
+        let s = render_to_string(&mut w, &ctx, 80, 24);
+        assert!(s.contains("Radio – abbreviations") && s.contains("0 abbreviations"), "{s}");
+        let code = w.current_text();
+        let meaning = data::abbreviations().iter().find(|(c, _)| *c == code).unwrap().1;
+        assert!(meaning.is_ascii());
+        type_text(&mut w, &mut ctx, &code);
+        w.on_key(key(KeyCode::Enter), &mut ctx);
+        let s = render_to_string(&mut w, &ctx, 80, 24);
+        assert!(s.contains("Meaning  ") && s.contains(meaning) && !s.contains("Sens "), "{s}");
+
+        let (mut w, ctx) = started(Kind::Callsigns, 41);
+        let s = render_to_string(&mut w, &ctx, 80, 24);
+        assert!(s.contains("Radio – callsigns") && s.contains("0 callsigns"), "{s}");
+        assert!(!s.contains("indicatifs"), "{s}");
+
+        // Toutes les tailles, tous les états.
+        for kind in [Kind::Words, Kind::HeadCopy, Kind::Callsigns, Kind::Abbreviations] {
+            for unlocked in [2, 41] {
+                for (cw, ch) in [(80, 24), (20, 6), (1, 1)] {
+                    let (mut w, mut ctx) = started(kind, unlocked);
+                    render_to_string(&mut w, &ctx, cw, ch);
+                    w.skip_wait(&mut ctx);
+                    w.on_key(key(KeyCode::Char('e')), &mut ctx);
+                    render_to_string(&mut w, &ctx, cw, ch);
+                    w.on_key(key(KeyCode::Enter), &mut ctx);
+                    render_to_string(&mut w, &ctx, cw, ch);
+                }
+            }
+        }
+        crate::i18n::set(crate::config::Lang::Fr);
     }
 
     #[test]

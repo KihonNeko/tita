@@ -2,6 +2,7 @@
 
 use crate::app::{Ctx, Nav, Screen, Summary};
 use crate::audio::PlaySpan;
+use crate::i18n::t;
 use crate::morse;
 use crate::picker;
 use crate::ui::{self, acc_color, bold, dim};
@@ -169,7 +170,7 @@ impl Koch {
             timing: ctx.timing(),
             can_unlock: true,
             misses,
-            notes: vec![format!("Groupes     {}", self.graded.len())],
+            notes: vec![crate::tr!("Groupes     {}", "Groups      {}", self.graded.len())],
         }
     }
 
@@ -277,16 +278,23 @@ impl Koch {
         let acc = correct as f32 / total.max(1) as f32;
         let mut lines = vec![
             Line::from(vec![
-                Span::raw("Précision "),
-                Span::styled(format!("{:.0} %", acc * 100.0), bold(acc_color(acc))),
-                Span::styled(format!("   ({correct} / {total}) · {} groupes", self.graded.len()), dim()),
+                Span::raw(t("Précision ", "Accuracy ")),
+                Span::styled(crate::tr!("{:.0} %", "{:.0}%", acc * 100.0), bold(acc_color(acc))),
+                Span::styled(
+                    crate::tr!(
+                        "   ({correct} / {total}) · {} groupes",
+                        "   ({correct} / {total}) · {} groups",
+                        self.graded.len()
+                    ),
+                    dim(),
+                ),
             ]),
             Line::raw(""),
         ];
         let per_row = ((width as usize).saturating_sub(LABEL) / (GROUP_LEN + 2)).max(1);
         for row in self.graded.chunks(per_row) {
-            let mut sent = vec![Span::styled(format!("{:<LABEL$}", "Envoyé"), dim())];
-            let mut typed = vec![Span::styled(format!("{:<LABEL$}", "Tapé"), dim())];
+            let mut sent = vec![Span::styled(format!("{:<LABEL$}", t("Envoyé", "Sent")), dim())];
+            let mut typed = vec![Span::styled(format!("{:<LABEL$}", t("Tapé", "Typed")), dim())];
             for g in row {
                 for (s, t) in &g.cells {
                     let ok = *t == Some(*s);
@@ -330,21 +338,35 @@ impl Screen for Koch {
         let now = Instant::now();
         match self.phase {
             Phase::Ready => {
-                let area = ui::frame(f, "Koch", &[("Entrée", "commencer"), ("Échap", "retour")]);
+                let area = ui::frame(
+                    f,
+                    "Koch",
+                    &[(t("Entrée", "Enter"), t("commencer", "start")), (t("Échap", "Esc"), t("retour", "back"))],
+                );
                 let chars: String = ctx.chars().iter().map(|c| format!("{c} ")).collect();
                 let lines = vec![
-                    Line::styled("Prêt ?", bold(ui::ACCENT)),
+                    Line::styled(t("Prêt ?", "Ready?"), bold(ui::ACCENT)),
                     Line::raw(""),
-                    Line::raw("Des groupes de 5 caractères vont défiler sans s'arrêter."),
-                    Line::raw("Tape ce que tu entends, Espace entre les groupes."),
-                    Line::raw("Une lettre t'échappe ? Laisse-la, reprends à la suivante."),
-                    Line::raw("La correction arrive à la fin."),
+                    Line::raw(t(
+                        "Des groupes de 5 caractères vont défiler sans s'arrêter.",
+                        "Groups of 5 characters will play without stopping.",
+                    )),
+                    Line::raw(t(
+                        "Tape ce que tu entends, Espace entre les groupes.",
+                        "Type what you hear, Space between groups.",
+                    )),
+                    Line::raw(t(
+                        "Une lettre t'échappe ? Laisse-la, reprends à la suivante.",
+                        "Missed a letter? Skip it and pick up at the next one.",
+                    )),
+                    Line::raw(t("La correction arrive à la fin.", "Grading comes at the end.")),
                     Line::raw(""),
-                    Line::from(vec![Span::styled("Caractères  ", dim()), Span::raw(chars)]),
+                    Line::from(vec![Span::styled(t("Caractères  ", "Characters  "), dim()), Span::raw(chars)]),
                     Line::from(vec![
-                        Span::styled("Vitesse     ", dim()),
-                        Span::raw(format!(
+                        Span::styled(t("Vitesse     ", "Speed       "), dim()),
+                        Span::raw(crate::tr!(
                             "{:.0} mots/min (effective {:.0}) · {}",
+                            "{:.0} wpm (effective {:.0}) · {}",
                             ctx.cfg.char_wpm,
                             ctx.cfg.eff_wpm.min(ctx.cfg.char_wpm),
                             ui::mmss(ctx.cfg.session_secs as u64)
@@ -361,46 +383,74 @@ impl Screen for Koch {
                 let area = ui::frame(
                     f,
                     "Koch",
-                    &[("Espace", "groupe suivant"), ("⌫", "corriger"), ("Échap", "arrêter")],
+                    &[
+                        (t("Espace", "Space"), t("groupe suivant", "next group")),
+                        ("⌫", t("corriger", "fix")),
+                        (t("Échap", "Esc"), t("arrêter", "stop")),
+                    ],
                 );
                 let total = ctx.cfg.session_secs as u64;
                 let secs = now.saturating_duration_since(self.started).as_secs();
                 let left = total.saturating_sub(secs);
                 let ratio = if total == 0 { 1.0 } else { secs as f32 / total as f32 };
                 let status = if left == 0 {
-                    "dernier groupe".to_string()
+                    t("dernier groupe", "last group").to_string()
                 } else {
-                    format!("reste {}", ui::mmss(left))
+                    crate::tr!("reste {}", "{} left", ui::mmss(left))
                 };
                 let lines = vec![
                     Line::from(vec![
                         Span::styled(ui::bar(ratio, 20), dim()),
                         Span::styled(
-                            format!("  {status} · groupe {}", self.groups_heard(now).max(1)),
+                            crate::tr!(
+                                "  {status} · groupe {}",
+                                "  {status} · group {}",
+                                self.groups_heard(now).max(1)
+                            ),
                             dim(),
                         ),
                     ]),
                     Line::raw(""),
                     self.input_line(area.width.min(60)),
                     Line::raw(""),
-                    Line::styled("Écoute et tape au fil de l'eau. Rien n'est corrigé avant la fin.", dim()),
+                    Line::styled(
+                        t(
+                            "Écoute et tape au fil de l'eau. Rien n'est corrigé avant la fin.",
+                            "Listen and type as you go. Nothing is graded until the end.",
+                        ),
+                        dim(),
+                    ),
                 ];
                 f.render_widget(Paragraph::new(lines), ui::centered(area, 64, 5));
             }
             Phase::Finishing(deadline) => {
-                let area = ui::frame(f, "Koch", &[("Entrée", "valider"), ("⌫", "corriger")]);
+                let area = ui::frame(
+                    f,
+                    "Koch",
+                    &[(t("Entrée", "Enter"), t("valider", "submit")), ("⌫", t("corriger", "fix"))],
+                );
                 let left = deadline.saturating_duration_since(now).as_secs() + 1;
                 let lines = vec![
-                    Line::styled("Terminé. Finis ta saisie.", bold(ui::ACCENT)),
+                    Line::styled(t("Terminé. Finis ta saisie.", "Done. Finish typing."), bold(ui::ACCENT)),
                     Line::raw(""),
                     self.input_line(area.width.min(60)),
                     Line::raw(""),
-                    Line::styled(format!("Entrée pour valider (correction dans {left} s)."), dim()),
+                    Line::styled(
+                        crate::tr!(
+                            "Entrée pour valider (correction dans {left} s).",
+                            "Enter to submit (grading in {left} s)."
+                        ),
+                        dim(),
+                    ),
                 ];
                 f.render_widget(Paragraph::new(lines), ui::centered(area, 64, 5));
             }
             Phase::Review => {
-                let area = ui::frame(f, "Koch — correction", &[("Entrée", "bilan"), ("↑↓", "défiler")]);
+                let area = ui::frame(
+                    f,
+                    t("Koch — correction", "Koch — review"),
+                    &[(t("Entrée", "Enter"), t("bilan", "summary")), ("↑↓", t("défiler", "scroll"))],
+                );
                 let lines = self.review_lines(area.width);
                 let max = (lines.len() as u16).saturating_sub(area.height);
                 self.scroll = self.scroll.min(max);
@@ -581,5 +631,63 @@ mod tests {
         }
         assert!(!k.edit_input(KeyCode::Left));
         assert_eq!(k.input, "A B");
+    }
+
+    #[test]
+    fn english_interface() {
+        crate::i18n::set(crate::config::Lang::En);
+        let sizes = [(80, 24), (20, 6)];
+        let mut ctx = Ctx::test();
+        ctx.cfg.session_secs = 0; // un seul groupe
+        let mut k = Koch::new();
+        k.on_enter(&mut ctx);
+        let s = render_to_string(&mut k, &ctx, 80, 24);
+        assert!(s.contains("Ready?") && s.contains("Groups of 5 characters") && s.contains("wpm"), "{s}");
+        assert!(s.contains("Grading comes at the end.") && s.contains("Speed") && s.contains("start"), "{s}");
+        assert!(!s.contains("Prêt") && !s.contains("mots/min") && !s.contains("Vitesse") && !s.contains("Échap"), "{s}");
+        render_to_string(&mut k, &ctx, 20, 6);
+
+        k.on_key(key(KeyCode::Enter), &mut ctx);
+        schedule_chars(&mut k, &mut ctx, GROUP_LEN + 3);
+        assert!(matches!(k.phase, Phase::Listening));
+        let s = render_to_string(&mut k, &ctx, 80, 24);
+        assert!(s.contains("last group · group 1") && s.contains("Nothing is graded until the end."), "{s}");
+        assert!(s.contains("next group") && !s.contains("dernier") && !s.contains("Écoute"), "{s}");
+        render_to_string(&mut k, &ctx, 20, 6);
+
+        let sent = k.groups[0].clone();
+        for c in sent.chars().take(GROUP_LEN - 1) {
+            k.on_key(key(KeyCode::Char(c)), &mut ctx);
+        }
+        let end = k.last_end().unwrap();
+        k.tick_at(&mut ctx, end + Duration::from_millis(1));
+        assert!(matches!(k.phase, Phase::Finishing(_)));
+        let s = render_to_string(&mut k, &ctx, 80, 24);
+        assert!(s.contains("Done. Finish typing.") && s.contains("Enter to submit (grading in"), "{s}");
+        assert!(!s.contains("Terminé") && !s.contains("valider"), "{s}");
+        render_to_string(&mut k, &ctx, 20, 6);
+
+        k.on_key(key(KeyCode::Enter), &mut ctx);
+        assert!(matches!(k.phase, Phase::Review));
+        let s = render_to_string(&mut k, &ctx, 80, 24);
+        assert!(s.contains("Koch — review") && s.contains("Accuracy 80%") && s.contains("1 groups"), "{s}");
+        assert!(s.contains("Sent    ") && s.contains("Typed   ") && s.contains("summary"), "{s}");
+        assert!(!s.contains("Envoyé") && !s.contains("Tapé") && !s.contains("Précision"), "{s}");
+        for (w, h) in sizes {
+            render_to_string(&mut k, &ctx, w, h);
+        }
+        assert_eq!(k.summary(&ctx).notes, vec!["Groups      1".to_string()]);
+        assert!(matches!(k.on_key(key(KeyCode::Enter), &mut ctx), Nav::Replace(_)));
+        assert_eq!(ctx.stats.sessions.last().unwrap().mode, "Koch");
+
+        // Session en cours : temps restant.
+        let mut ctx = Ctx::test();
+        ctx.cfg.session_secs = 300;
+        let mut k = Koch::new();
+        k.on_key(key(KeyCode::Enter), &mut ctx);
+        schedule_chars(&mut k, &mut ctx, 2);
+        let s = render_to_string(&mut k, &ctx, 80, 24);
+        assert!(s.contains(" left · group 1") && !s.contains("reste"), "{s}");
+        crate::i18n::set(crate::config::Lang::Fr);
     }
 }

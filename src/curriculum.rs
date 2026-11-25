@@ -12,26 +12,34 @@ pub enum Track {
 }
 
 pub struct Lesson {
-    pub title: &'static str,
+    title: &'static str,
+    title_en: &'static str,
     pub chars: &'static str,
 }
 
+impl Lesson {
+    /// Titre dans la langue de l'interface.
+    pub fn title(&self) -> &'static str {
+        crate::i18n::t(self.title, self.title_en)
+    }
+}
+
 pub const LESSONS: &[Lesson] = &[
-    Lesson { title: "Lettres fondamentales", chars: "ET" },
-    Lesson { title: "Lettres courantes", chars: "IMSO" },
-    Lesson { title: "Lettres étendues", chars: "ANRW" },
-    Lesson { title: "Lettres avancées", chars: "DKGU" },
-    Lesson { title: "Lettres restantes I", chars: "LPJB" },
-    Lesson { title: "Lettres restantes II", chars: "XCYZ" },
-    Lesson { title: "Fin de l'alphabet", chars: "QFHV" },
-    Lesson { title: "Chiffres 1-5", chars: "12345" },
-    Lesson { title: "Chiffres 6-0", chars: "67890" },
-    Lesson { title: "Ponctuation", chars: ".?,/=" },
-    Lesson { title: "Ponctuation II", chars: "+-'!@" },
-    Lesson { title: "Parenthèses et deux-points", chars: "():;" },
-    Lesson { title: "Symboles rares", chars: "\"_$" },
-    Lesson { title: "Lettres accentuées", chars: "ÉÀÈÇ" },
-    Lesson { title: "Signaux spéciaux", chars: "&<>#*" },
+    Lesson { title: "Lettres fondamentales", title_en: "Core letters", chars: "ET" },
+    Lesson { title: "Lettres courantes", title_en: "Common letters", chars: "IMSO" },
+    Lesson { title: "Lettres étendues", title_en: "More letters", chars: "ANRW" },
+    Lesson { title: "Lettres avancées", title_en: "Advanced letters", chars: "DKGU" },
+    Lesson { title: "Lettres restantes I", title_en: "Remaining letters I", chars: "LPJB" },
+    Lesson { title: "Lettres restantes II", title_en: "Remaining letters II", chars: "XCYZ" },
+    Lesson { title: "Fin de l'alphabet", title_en: "End of the alphabet", chars: "QFHV" },
+    Lesson { title: "Chiffres 1-5", title_en: "Digits 1-5", chars: "12345" },
+    Lesson { title: "Chiffres 6-0", title_en: "Digits 6-0", chars: "67890" },
+    Lesson { title: "Ponctuation", title_en: "Punctuation", chars: ".?,/=" },
+    Lesson { title: "Ponctuation II", title_en: "Punctuation II", chars: "+-'!@" },
+    Lesson { title: "Parenthèses et deux-points", title_en: "Brackets and colons", chars: "():;" },
+    Lesson { title: "Symboles rares", title_en: "Rare symbols", chars: "\"_$" },
+    Lesson { title: "Lettres accentuées", title_en: "Accented letters", chars: "ÉÀÈÇ" },
+    Lesson { title: "Signaux spéciaux", title_en: "Special signals", chars: "&<>#*" },
 ];
 
 pub const KOCH_ORDER: &str =
@@ -40,7 +48,7 @@ pub const KOCH_ORDER: &str =
 impl Track {
     pub fn label(self) -> &'static str {
         match self {
-            Track::Lessons => "Leçons par lettres",
+            Track::Lessons => crate::i18n::t("Leçons par lettres", "Lessons by letters"),
             Track::Koch => "Koch",
         }
     }

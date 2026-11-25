@@ -7,7 +7,9 @@ speed with long pauses between them, so you learn the *sound* of each letter
 instead of counting dots and dashes. New characters unlock once you reach 90 %
 accuracy on the current ones.
 
-The interface is in French.
+The interface is available in English and French. It starts in your system
+language; change it in **Settings → Interface language** (**Réglages → Langue de
+l'interface**).
 
 ## Install
 
@@ -41,24 +43,24 @@ tita show "SOS"           # print the dot/dash patterns
 In the menu: `↑` `↓` to choose, `Enter` to start, `Esc` to stop a session or
 go back, `q` to quit.
 
-Start with **Lettres**. You begin with E and T; the rest follows as you
+Start with **Letters**. You begin with E and T; the rest follows as you
 progress. Short sessions, several times a day, work best.
 
 ## Modes
 
-| Mode             | What it does                                                                 |
-|------------------|------------------------------------------------------------------------------|
-| Lettres          | One character plays, you press its key. Mistakes are replayed and come back. |
-| Lettres sans fin | Same, with no time limit and no pause: trains reaction time.                 |
-| Découverte       | Listen to the unlocked characters with their pattern shown.                  |
-| Koch             | Groups of 5 characters at full speed; you copy, it is graded at the end.     |
-| Flux             | A continuous stream that never waits for you; speed adapts to your accuracy. |
-| Mots             | Common words (French or English) made only of the letters you know.          |
-| Copie de tête    | The whole word plays first, then you type it from memory.                    |
-| Radio            | Callsigns, Q codes and abbreviations, simulated contacts.                    |
-| Émission         | Send Morse with the keyboard; tita decodes your rhythm.                      |
-| Statistiques     | Accuracy and reaction time per character, most frequent confusions.          |
-| Réglages         | Speeds, tone, volume, session length, learning order.                        |
+| Mode            | In French        | What it does                                                                 |
+|-----------------|------------------|------------------------------------------------------------------------------|
+| Letters         | Lettres          | One character plays, you press its key. Mistakes are replayed and come back. |
+| Endless letters | Lettres sans fin | Same, with no time limit and no pause: trains reaction time.                 |
+| Discover        | Découverte       | Listen to the unlocked characters with their pattern shown.                  |
+| Koch            | Koch             | Groups of 5 characters at full speed; you copy, it is graded at the end.     |
+| Stream          | Flux             | A continuous stream that never waits for you; speed adapts to your accuracy. |
+| Words           | Mots             | Common words (French or English) made only of the letters you know.          |
+| Head copy       | Copie de tête    | The whole word plays first, then you type it from memory.                    |
+| Radio           | Radio            | Callsigns, Q codes and abbreviations, simulated contacts.                    |
+| Sending         | Émission         | Send Morse with the keyboard; tita decodes your rhythm.                      |
+| Statistics      | Statistiques     | Accuracy and reaction time per character, most frequent confusions.          |
+| Settings        | Réglages         | Language, speeds, tone, volume, session length, learning order.              |
 
 ## Characters
 
@@ -76,15 +78,18 @@ Special signals are typed with one key each:
 | `#` | HH     | error (8 dots)         |
 | `*` | SOS    | distress               |
 
-Two learning orders are available in **Réglages**: lessons by groups of letters
+Two learning orders are available in **Settings**: lessons by groups of letters
 (E T, then I M S O, ...) or the classic Koch order (K M U R E S ...).
 
 ## Settings
 
-- **Vitesse des caractères**: how fast each character is sent (default 20 wpm).
-- **Vitesse effective**: overall speed, set by the pauses (default 8 wpm).
+- **Interface language**: English or French.
+- **Character speed**: how fast each character is sent (default 20 wpm).
+- **Effective speed**: overall speed, set by the pauses (default 8 wpm).
   Raise it as you improve.
-- If you already know some letters, unlock them by hand in **Réglages**.
+- **Word list language**: French or English words in the word modes.
+- If you already know some letters, unlock them by hand at the bottom of the
+  list.
 
 Settings and progress are stored in your user config and data folders
 (`~/.config/tita` and `~/.local/share/tita` on Linux).

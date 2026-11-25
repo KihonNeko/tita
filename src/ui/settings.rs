@@ -3,6 +3,7 @@
 use crate::app::{Ctx, Nav, Screen};
 use crate::config::Lang;
 use crate::curriculum::Track;
+use crate::i18n::t;
 use crate::ui::{self, bold, dim};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::style::Color;
@@ -12,6 +13,7 @@ use ratatui::Frame;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Item {
+    UiLang,
     Track,
     CharWpm,
     EffWpm,
@@ -25,6 +27,7 @@ enum Item {
 }
 
 const ITEMS: &[Item] = &[
+    Item::UiLang,
     Item::Track,
     Item::CharWpm,
     Item::EffWpm,
@@ -46,50 +49,86 @@ pub const THRESHOLD_PCT: (i32, i32) = (70, 100);
 impl Item {
     fn label(self) -> &'static str {
         match self {
-            Item::Track => "Parcours",
-            Item::CharWpm => "Vitesse des caractères",
-            Item::EffWpm => "Vitesse effective",
-            Item::Freq => "Tonalité",
+            Item::UiLang => t("Langue de l'interface", "Interface language"),
+            Item::Track => t("Parcours", "Track"),
+            Item::CharWpm => t("Vitesse des caractères", "Character speed"),
+            Item::EffWpm => t("Vitesse effective", "Effective speed"),
+            Item::Freq => t("Tonalité", "Tone"),
             Item::Volume => "Volume",
-            Item::Session => "Durée de session",
-            Item::Threshold => "Seuil de déblocage",
-            Item::ShowPattern => "Motif après une erreur",
-            Item::Lang => "Langue des mots",
-            Item::Unlocked => "Caractères débloqués",
+            Item::Session => t("Durée de session", "Session length"),
+            Item::Threshold => t("Seuil de déblocage", "Unlock threshold"),
+            Item::ShowPattern => t("Motif après une erreur", "Pattern after an error"),
+            Item::Lang => t("Langue des mots", "Word list language"),
+            Item::Unlocked => t("Caractères débloqués", "Unlocked characters"),
         }
     }
 
     fn help(self) -> &'static str {
         match self {
-            Item::Track => {
+            Item::UiLang => t(
+                "Langue des menus, des écrans et de l'aide. Le changement est immédiat. \
+                 Les listes de mots ont leur propre réglage : « Langue des mots ».",
+                "Language of the menus, screens and help. The change applies at once. \
+                 Word lists have their own setting: \"Word list language\".",
+            ),
+            Item::Track => t(
                 "Ordre d'apprentissage. Leçons : par petits groupes de lettres (E T, puis I M S O...). \
                  Koch : un caractère à la fois, dans l'ordre classique K M U R E S... \
-                 Chaque parcours garde sa propre progression."
-            }
-            Item::CharWpm => {
+                 Chaque parcours garde sa propre progression.",
+                "Learning order. Lessons: small groups of letters (E T, then I M S O...). \
+                 Koch: one character at a time, in the classic order K M U R E S... \
+                 Each track keeps its own progress.",
+            ),
+            Item::CharWpm => t(
                 "Vitesse à laquelle chaque caractère est joué (durée des points et des traits). \
                  Garde-la élevée, 18 à 20 mots/min : tu apprends le son global du caractère \
-                 au lieu de compter les points."
-            }
-            Item::EffWpm => {
+                 au lieu de compter les points.",
+                "Speed at which each character is played (length of dots and dashes). \
+                 Keep it high, 18 to 20 wpm: you learn the overall sound of the character \
+                 instead of counting dots.",
+            ),
+            Item::EffWpm => t(
                 "Vitesse d'ensemble, silences compris. Plus basse que la vitesse des caractères, \
                  elle allonge seulement les pauses entre caractères et entre mots (méthode \
                  Farnsworth) : les caractères sonnent pareil, tu as plus de temps pour répondre. \
-                 Remonte-la peu à peu."
-            }
-            Item::Freq => "Hauteur du son, en hertz. Choisis une note confortable ; 600 à 700 Hz est courant.",
-            Item::Volume => "Volume du son. Appuie sur Espace pour écouter le résultat.",
-            Item::Session => "Durée des sessions chronométrées. Mieux vaut court et tous les jours que long et rare.",
-            Item::Threshold => {
+                 Remonte-la peu à peu.",
+                "Overall speed, silences included. Lower than the character speed, it only \
+                 lengthens the pauses between characters and between words (Farnsworth \
+                 method): characters sound the same, you get more time to answer. \
+                 Raise it little by little.",
+            ),
+            Item::Freq => t(
+                "Hauteur du son, en hertz. Choisis une note confortable ; 600 à 700 Hz est courant.",
+                "Pitch of the sound, in hertz. Pick a comfortable note; 600 to 700 Hz is common.",
+            ),
+            Item::Volume => t(
+                "Volume du son. Appuie sur Espace pour écouter le résultat.",
+                "Sound volume. Press Space to hear the result.",
+            ),
+            Item::Session => t(
+                "Durée des sessions chronométrées. Mieux vaut court et tous les jours que long et rare.",
+                "Length of timed sessions. Short and daily beats long and rare.",
+            ),
+            Item::Threshold => t(
                 "Précision à atteindre en fin de session pour débloquer de nouveaux caractères. \
-                 90 % est la règle habituelle."
-            }
-            Item::ShowPattern => "Afficher le motif (· −) du caractère après une erreur. Désactive-le pour ne travailler qu'à l'oreille.",
-            Item::Lang => "Langue des listes de mots utilisées dans les modes Mots et Copie de tête.",
-            Item::Unlocked => {
+                 90 % est la règle habituelle.",
+                "Accuracy to reach at the end of a session to unlock new characters. \
+                 90 % is the usual rule.",
+            ),
+            Item::ShowPattern => t(
+                "Afficher le motif (· −) du caractère après une erreur. Désactive-le pour ne travailler qu'à l'oreille.",
+                "Show the character's pattern (· −) after an error. Turn it off to work by ear only.",
+            ),
+            Item::Lang => t(
+                "Langue des listes de mots utilisées dans les modes Mots et Copie de tête.",
+                "Language of the word lists used in the Words and Head copy modes.",
+            ),
+            Item::Unlocked => t(
                 "Nombre de caractères du parcours actif déjà débloqués. ← en retire un, → en ajoute un : \
-                 utile si tu connais déjà une partie de l'alphabet."
-            }
+                 utile si tu connais déjà une partie de l'alphabet.",
+                "Number of characters of the active track already unlocked. ← removes one, → adds one: \
+                 useful if you already know part of the alphabet.",
+            ),
         }
     }
 }
@@ -109,19 +148,24 @@ impl Settings {
 
     fn value(item: Item, ctx: &Ctx) -> String {
         let c = &ctx.cfg;
+        // Chaque langue est nommée dans sa propre langue.
+        let lang_name = |l: Lang| match l {
+            Lang::Fr => "Français".to_string(),
+            Lang::En => "English".to_string(),
+        };
         match item {
+            Item::UiLang => lang_name(c.ui_lang),
             Item::Track => c.track.label().to_string(),
-            Item::CharWpm => format!("{:.0} mots/min", c.char_wpm),
-            Item::EffWpm => format!("{:.0} mots/min", c.eff_wpm),
+            Item::CharWpm => crate::tr!("{:.0} mots/min", "{:.0} wpm", c.char_wpm),
+            Item::EffWpm => crate::tr!("{:.0} mots/min", "{:.0} wpm", c.eff_wpm),
             Item::Freq => format!("{:.0} Hz", c.freq),
             Item::Volume => format!("{:.0} %", c.volume * 100.0),
             Item::Session => format!("{} min", minutes(c.session_secs)),
             Item::Threshold => format!("{:.0} %", c.unlock_threshold * 100.0),
-            Item::ShowPattern => if c.show_pattern_on_error { "oui" } else { "non" }.to_string(),
-            Item::Lang => match c.lang {
-                Lang::Fr => "Français".to_string(),
-                Lang::En => "English".to_string(),
-            },
+            Item::ShowPattern => {
+                if c.show_pattern_on_error { t("oui", "yes") } else { t("non", "no") }.to_string()
+            }
+            Item::Lang => lang_name(c.lang),
             Item::Unlocked => {
                 format!("{} / {}", ctx.stats.unlocked(c.track), c.track.order().len())
             }
@@ -133,6 +177,14 @@ impl Settings {
         let dir = dir.signum();
         let c = &mut ctx.cfg;
         match item {
+            Item::UiLang => {
+                c.ui_lang = match c.ui_lang {
+                    Lang::Fr => Lang::En,
+                    Lang::En => Lang::Fr,
+                };
+                // Effet immédiat : tout l'écran change de langue au prochain dessin.
+                crate::i18n::set(c.ui_lang);
+            }
             Item::Track => {
                 c.track = match c.track {
                     Track::Lessons => Track::Koch,
@@ -228,8 +280,13 @@ impl Screen for Settings {
     fn draw(&mut self, f: &mut Frame, ctx: &Ctx) {
         let area = ui::frame(
             f,
-            "Réglages",
-            &[("↑↓", "choisir"), ("←→", "modifier"), ("Espace", "tester le son"), ("Échap", "enregistrer et revenir")],
+            t("Réglages", "Settings"),
+            &[
+                ("↑↓", t("choisir", "select")),
+                ("←→", t("modifier", "change")),
+                (t("Espace", "Space"), t("tester le son", "test the sound")),
+                (t("Échap", "Esc"), t("enregistrer et revenir", "save and go back")),
+            ],
         );
         let current = self.item();
         let mut lines: Vec<Line> = Vec::new();
@@ -277,7 +334,10 @@ impl Screen for Settings {
         lines.push(Line::raw(""));
         lines.push(Line::styled(current.help(), dim()));
         if !ctx.audio.available {
-            lines.push(Line::styled("Pas de sortie audio : le test du son est muet.", bold(ui::ERR)));
+            lines.push(Line::styled(
+                t("Pas de sortie audio : le test du son est muet.", "No audio output: the sound test is silent."),
+                bold(ui::ERR),
+            ));
         }
         f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
     }
@@ -319,6 +379,9 @@ mod tests {
                 }
             }
         }
+        // Le réglage de langue a été basculé un nombre pair de fois.
+        assert_eq!(ctx.cfg.ui_lang, Lang::Fr);
+        crate::i18n::set(Lang::Fr);
     }
 
     #[test]
@@ -444,6 +507,8 @@ mod tests {
         s.on_key(k(KeyCode::Up), &mut ctx);
         assert_eq!(s.item(), Item::Unlocked);
         s.on_key(k(KeyCode::Down), &mut ctx);
+        assert_eq!(s.item(), Item::UiLang);
+        s.on_key(k(KeyCode::Down), &mut ctx);
         assert_eq!(s.item(), Item::Track);
 
         assert!(ctx.audio.is_idle());
@@ -451,6 +516,7 @@ mod tests {
         assert!(!ctx.audio.is_idle(), "le test « VVV » est mis en file");
         // Espace ne modifie aucun réglage.
         assert_eq!(ctx.cfg.track, Track::Lessons);
+        assert_eq!(ctx.cfg.ui_lang, Lang::Fr);
 
         assert!(matches!(s.on_key(k(KeyCode::Esc), &mut ctx), Nav::Back));
         s.on_leave(&mut ctx);
@@ -473,10 +539,79 @@ mod tests {
             }
         }
         // L'aide de la vitesse effective explique la différence.
-        s.sel = 2;
+        s.sel = ITEMS.iter().position(|i| *i == Item::EffWpm).unwrap();
         let out = render_to_string(&mut s, &ctx, 80, 24);
         assert!(out.contains("Farnsworth"), "{out}");
         ctx.stats.set_unlocked(ctx.cfg.track, 41);
         render_to_string(&mut s, &ctx, 80, 24);
+    }
+
+    /// Mots présents uniquement dans la version française de l'écran.
+    const FRENCH_ONLY: &[&str] = &[
+        "Réglages", "Langue", "Parcours", "Vitesse", "Tonalité", "Durée", "Seuil", "Motif", "Caractères",
+        "mots/min", "oui", "choisir", "modifier", "Espace", "Échap", "enregistrer",
+    ];
+
+    #[test]
+    fn interface_language_is_first_and_switches_at_once() {
+        let mut ctx = Ctx::test();
+        let mut s = Settings::new();
+        s.on_enter(&mut ctx);
+        assert_eq!(ITEMS[0], Item::UiLang);
+        assert_eq!(s.item(), Item::UiLang);
+        assert_eq!(ctx.cfg.ui_lang, Lang::Fr);
+        let out = render_to_string(&mut s, &ctx, 80, 24);
+        assert!(out.contains("Réglages") && out.contains("Langue de l'interface"), "{out}");
+        assert!(out.contains("Langue des mots") && out.contains("Le changement est immédiat"), "{out}");
+        assert!(!out.contains("Interface language") && !out.contains("Settings"), "{out}");
+
+        // → : l'écran entier passe à l'anglais, sans autre action.
+        s.on_key(k(KeyCode::Right), &mut ctx);
+        assert_eq!(ctx.cfg.ui_lang, Lang::En);
+        assert!(crate::i18n::is_en());
+        // La langue des listes de mots est un réglage distinct, inchangé.
+        assert_eq!(ctx.cfg.lang, Lang::Fr);
+        let out = render_to_string(&mut s, &ctx, 80, 24);
+        for en in ["Settings", "Interface language", "English", "Word list language", "The change applies at once", "20 wpm", "yes", "save and go back"] {
+            assert!(out.contains(en), "{en} absent :\n{out}");
+        }
+        for fr in FRENCH_ONLY {
+            assert!(!out.contains(fr), "{fr} présent :\n{out}");
+        }
+
+        // ← : retour au français, tout aussi immédiat.
+        s.on_key(k(KeyCode::Left), &mut ctx);
+        assert_eq!(ctx.cfg.ui_lang, Lang::Fr);
+        assert!(!crate::i18n::is_en());
+        let out = render_to_string(&mut s, &ctx, 80, 24);
+        assert!(out.contains("Réglages") && out.contains("Langue de l'interface"), "{out}");
+        assert!(!out.contains("Interface language"), "{out}");
+        crate::i18n::set(Lang::Fr);
+    }
+
+    #[test]
+    fn renders_in_english() {
+        let ctx = Ctx::test();
+        crate::i18n::set(Lang::En);
+        let mut s = Settings::new();
+        for i in 0..ITEMS.len() {
+            s.sel = i;
+            let out = render_to_string(&mut s, &ctx, 80, 24);
+            for item in ITEMS {
+                assert!(out.contains(item.label()), "{} absent :\n{out}", item.label());
+            }
+            for fr in FRENCH_ONLY {
+                assert!(!out.contains(fr), "{fr} présent (réglage {i}) :\n{out}");
+            }
+            // L'aide (dernier paragraphe) n'est pas coupée par le bas de l'écran.
+            let help = s.item().help();
+            let last = help.split_whitespace().last().unwrap();
+            assert!(out.contains(last), "aide tronquée (réglage {i}) :\n{out}");
+            for (w, h) in [(20, 6), (1, 1), (200, 60)] {
+                render_to_string(&mut s, &ctx, w, h);
+            }
+        }
+        assert!(render_to_string(&mut s, &ctx, 80, 24).contains("Unlocked characters"));
+        crate::i18n::set(Lang::Fr);
     }
 }

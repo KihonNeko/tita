@@ -5,6 +5,7 @@ mod audio;
 mod config;
 mod curriculum;
 mod data;
+mod i18n;
 mod modes;
 mod morse;
 mod picker;
@@ -15,7 +16,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "tita", version, about = "Apprendre le Morse à l'oreille, dans le terminal")]
+#[command(name = "tita", version, about = "Learn Morse code by ear, in your terminal")]
 struct Cli {
     #[command(subcommand)]
     cmd: Option<Cmd>,
@@ -23,26 +24,27 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Joue un texte en Morse puis quitte
+    /// Play some text in Morse, then exit
     Play {
         text: Vec<String>,
-        /// Vitesse des caractères (mots/minute)
+        /// Character speed (words per minute)
         #[arg(long)]
         wpm: Option<f32>,
-        /// Vitesse effective (Farnsworth)
+        /// Effective speed (Farnsworth spacing)
         #[arg(long)]
         eff: Option<f32>,
-        /// Fréquence du son (Hz)
+        /// Tone frequency (Hz)
         #[arg(long)]
         freq: Option<f32>,
     },
-    /// Affiche le motif Morse d'un texte
+    /// Print the Morse pattern of some text
     Show { text: Vec<String> },
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let cfg = config::Config::load();
+    i18n::set(cfg.ui_lang);
     match cli.cmd {
         Some(Cmd::Show { text }) => {
             for c in text.join(" ").chars() {
@@ -59,9 +61,15 @@ fn main() -> Result<()> {
             let audio = audio::Audio::new(&cfg.backend, freq.unwrap_or(cfg.freq), cfg.volume);
             if !audio.available {
                 anyhow::bail!(if cfg!(target_os = "linux") {
-                    "pas de sortie audio : installe pipewire (pw-cat) ou alsa-utils (aplay)"
+                    i18n::t(
+                        "pas de sortie audio : installe pipewire (pw-cat) ou alsa-utils (aplay)",
+                        "no audio output: install pipewire (pw-cat) or alsa-utils (aplay)",
+                    )
                 } else {
-                    "pas de sortie audio : aucun périphérique de sortie utilisable"
+                    i18n::t(
+                        "pas de sortie audio : aucun périphérique de sortie utilisable",
+                        "no audio output: no usable output device",
+                    )
                 });
             }
             audio.play(&text.join(" "), t);

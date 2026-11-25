@@ -5,6 +5,7 @@
 
 use crate::app::{Ctx, Nav, Screen, Summary};
 use crate::audio::PlaySpan;
+use crate::i18n::t;
 use crate::modes::words::{align, diff_spans, Kind, Tally, Words};
 use crate::ui::{self, bold, dim};
 use crate::{data, morse};
@@ -29,17 +30,26 @@ const TOPICS: [Topic; 3] = [Topic::Callsigns, Topic::Abbreviations, Topic::Qso];
 impl Topic {
     fn label(self) -> &'static str {
         match self {
-            Topic::Callsigns => "Indicatifs",
-            Topic::Abbreviations => "Abréviations et codes Q",
-            Topic::Qso => "Échange complet",
+            Topic::Callsigns => t("Indicatifs", "Callsigns"),
+            Topic::Abbreviations => t("Abréviations et codes Q", "Abbreviations and Q codes"),
+            Topic::Qso => t("Échange complet", "Full contact"),
         }
     }
 
     fn desc(self) -> &'static str {
         match self {
-            Topic::Callsigns => "Des indicatifs de stations, à copier un par un.",
-            Topic::Abbreviations => "Les abréviations du trafic, avec leur sens à la correction.",
-            Topic::Qso => "Un contact simulé, à copier transmission par transmission.",
+            Topic::Callsigns => t(
+                "Des indicatifs de stations, à copier un par un.",
+                "Station callsigns, to copy one at a time.",
+            ),
+            Topic::Abbreviations => t(
+                "Les abréviations du trafic, avec leur sens à la correction.",
+                "On-air abbreviations, with their meaning shown at correction.",
+            ),
+            Topic::Qso => t(
+                "Un contact simulé, à copier transmission par transmission.",
+                "A simulated contact, to copy one transmission at a time.",
+            ),
         }
     }
 }
@@ -152,7 +162,10 @@ impl Screen for Radio {
             let area = ui::frame(
                 f,
                 &format!("Radio – {}", topic.label()),
-                &[("Entrée", "essayer quand même"), ("Échap", "retour")],
+                &[
+                    (t("Entrée", "Enter"), t("essayer quand même", "try anyway")),
+                    (t("Échap", "Esc"), t("retour", "back")),
+                ],
             );
             let mut list: String =
                 miss.iter().take(18).map(|c| format!("{c} ")).collect::<String>();
@@ -160,19 +173,37 @@ impl Screen for Radio {
                 list.push('…');
             }
             let lines = vec![
-                Line::styled("Pas encore assez de caractères débloqués pour ce contenu.", bold(ui::WARN)),
+                Line::styled(
+                    t(
+                        "Pas encore assez de caractères débloqués pour ce contenu.",
+                        "Not enough characters unlocked yet for this content.",
+                    ),
+                    bold(ui::WARN),
+                ),
                 Line::raw(""),
                 Line::from(vec![
-                    Span::styled("À débloquer d'abord : ", dim()),
+                    Span::styled(t("À débloquer d'abord : ", "To unlock first: "), dim()),
                     Span::styled(list, bold(Color::White)),
                 ]),
-                Line::styled("Continue les modes Lettres ou Koch pour y arriver.", dim()),
+                Line::styled(
+                    t(
+                        "Continue les modes Lettres ou Koch pour y arriver.",
+                        "Keep going with the Letters or Koch modes to get there.",
+                    ),
+                    dim(),
+                ),
                 Line::raw(""),
                 Line::from(vec![
-                    Span::styled("Entrée", bold(ui::ACCENT)),
-                    Span::raw(" : essayer quand même avec tous les caractères"),
+                    Span::styled(t("Entrée", "Enter"), bold(ui::ACCENT)),
+                    Span::raw(t(
+                        " : essayer quand même avec tous les caractères",
+                        ": try anyway with all characters",
+                    )),
                 ]),
-                Line::from(vec![Span::styled("Échap", bold(ui::ACCENT)), Span::raw(" : retour")]),
+                Line::from(vec![
+                    Span::styled(t("Échap", "Esc"), bold(ui::ACCENT)),
+                    Span::raw(t(" : retour", ": back")),
+                ]),
             ];
             let h = lines.len() as u16 + 2;
             f.render_widget(
@@ -182,17 +213,25 @@ impl Screen for Radio {
             return;
         }
 
-        let area = ui::frame(f, "Radio", &[("↑↓", "choisir"), ("Entrée", "lancer"), ("Échap", "retour")]);
+        let area = ui::frame(
+            f,
+            "Radio",
+            &[
+                ("↑↓", t("choisir", "select")),
+                (t("Entrée", "Enter"), t("lancer", "start")),
+                (t("Échap", "Esc"), t("retour", "back")),
+            ],
+        );
         let allowed = ctx.chars();
-        let mut lines = vec![Line::styled("Que veux-tu copier ?", dim()), Line::raw("")];
-        for (i, t) in TOPICS.iter().enumerate() {
+        let mut lines = vec![Line::styled(t("Que veux-tu copier ?", "What do you want to copy?"), dim()), Line::raw("")];
+        for (i, item) in TOPICS.iter().enumerate() {
             let mut spans = vec![if i == self.sel {
-                Span::styled(format!(" ▶ {}", t.label()), bold(ui::ACCENT))
+                Span::styled(format!(" ▶ {}", item.label()), bold(ui::ACCENT))
             } else {
-                Span::raw(format!("   {}", t.label()))
+                Span::raw(format!("   {}", item.label()))
             }];
-            if !ready(*t, &allowed) {
-                spans.push(Span::styled("  (caractères à débloquer)", dim()));
+            if !ready(*item, &allowed) {
+                spans.push(Span::styled(t("  (caractères à débloquer)", "  (characters to unlock)"), dim()));
             }
             lines.push(Line::from(spans));
         }
@@ -268,6 +307,10 @@ fn review_lines(sent: &str, typed: &str, width: usize) -> Vec<Line<'static>> {
     lines
 }
 
+fn qso_title() -> &'static str {
+    t("Radio – échange complet", "Radio – full contact")
+}
+
 struct Qso {
     force: bool,
     txs: Vec<String>,
@@ -333,14 +376,19 @@ impl Qso {
 
     fn finish(&mut self, ctx: &mut Ctx) -> Nav {
         ctx.finish(Summary {
-            mode: "Radio – échange complet".into(),
+            mode: qso_title().into(),
             elapsed: self.started.map(|t| t.elapsed()).unwrap_or_default(),
             total: self.tally.total,
             correct: self.tally.correct,
             timing: ctx.timing(),
             can_unlock: false,
             misses: self.tally.misses(),
-            notes: vec![format!("Transmissions copiées : {} sur {}", self.copied, self.txs.len())],
+            notes: vec![crate::tr!(
+                "Transmissions copiées : {} sur {}",
+                "Transmissions copied: {} of {}",
+                self.copied,
+                self.txs.len()
+            )],
         })
     }
 }
@@ -405,32 +453,58 @@ impl Screen for Qso {
     }
 
     fn draw(&mut self, f: &mut Frame, _ctx: &Ctx) {
-        let hints: &[(&str, &str)] = if self.review {
-            &[("Entrée", "suite"), ("Tab", "réécouter"), ("Échap", "terminer")]
+        let (enter, replay) = if self.review {
+            (t("suite", "continue"), t("réécouter", "replay"))
         } else {
-            &[("Entrée", "corriger"), ("Tab", "réécouter du début"), ("Échap", "terminer")]
+            (t("corriger", "check"), t("réécouter du début", "replay from the start"))
         };
-        let area = ui::frame(f, "Radio – échange complet", hints);
-        let mut status = format!("Transmission {} sur {}", (self.idx + 1).min(self.txs.len()), self.txs.len());
+        let hints =
+            [(t("Entrée", "Enter"), enter), ("Tab", replay), (t("Échap", "Esc"), t("terminer", "finish"))];
+        let area = ui::frame(f, qso_title(), &hints);
+        let mut status = crate::tr!(
+            "Transmission {} sur {}",
+            "Transmission {} of {}",
+            (self.idx + 1).min(self.txs.len()),
+            self.txs.len()
+        );
         if let Some(acc) = self.tally.accuracy() {
             status.push_str(&format!(" · {:.0} %", acc * 100.0));
         }
         let mut lines = vec![Line::styled(status, dim()), Line::raw("")];
         if self.review {
             let sent = self.txs.get(self.idx).map(String::as_str).unwrap_or("");
-            lines.push(Line::styled("Le texte émis, et ta copie dessous :", dim()));
+            lines.push(Line::styled(
+                t("Le texte émis, et ta copie dessous :", "The text sent, with your copy below:"),
+                dim(),
+            ));
             lines.push(Line::raw(""));
             lines.extend(review_lines(sent, &self.input, area.width as usize));
             let last = self.idx + 1 >= self.txs.len();
             lines.push(Line::styled(
-                if last { "Entrée : terminer l'échange." } else { "Entrée : transmission suivante." },
+                if last {
+                    t("Entrée : terminer l'échange.", "Enter: finish the contact.")
+                } else {
+                    t("Entrée : transmission suivante.", "Enter: next transmission.")
+                },
                 dim(),
             ));
         } else {
             lines.push(if self.playing() {
-                Line::styled("Écoute et note ce que tu copies, espaces compris.", dim())
+                Line::styled(
+                    t(
+                        "Écoute et note ce que tu copies, espaces compris.",
+                        "Listen and write down what you copy, spaces included.",
+                    ),
+                    dim(),
+                )
             } else {
-                Line::styled("Transmission terminée. Entrée pour voir la correction.", bold(ui::ACCENT))
+                Line::styled(
+                    t(
+                        "Transmission terminée. Entrée pour voir la correction.",
+                        "Transmission over. Press Enter to see the correction.",
+                    ),
+                    bold(ui::ACCENT),
+                )
             });
             lines.push(Line::raw(""));
             lines.push(Line::from(vec![
@@ -693,6 +767,79 @@ mod tests {
         let s = ctx.stats.sessions.last().unwrap();
         assert_eq!(s.mode, "Radio – échange complet");
         assert!(s.total > chars && s.correct == chars - 1);
+    }
+
+    #[test]
+    fn english_interface() {
+        crate::i18n::set(crate::config::Lang::En);
+        // Sous-menu.
+        let mut ctx = ctx_with(41);
+        let mut r = Radio::new();
+        r.on_enter(&mut ctx);
+        let s = render_to_string(&mut r, &ctx, 80, 24);
+        assert!(s.contains("What do you want to copy?") && s.contains("▶ Callsigns"), "{s}");
+        assert!(s.contains("Abbreviations and Q codes") && s.contains("Full contact"), "{s}");
+        assert!(s.contains("Station callsigns, to copy one at a time."), "{s}");
+        assert!(s.contains("select") && s.contains("Esc") && !s.contains("to unlock"), "{s}");
+        for fr in ["Indicatifs", "Échange", "Que veux-tu", "choisir", "lancer", "retour", "Entrée"] {
+            assert!(!s.contains(fr), "{fr} : {s}");
+        }
+        for sel in 0..3 {
+            r.sel = sel;
+            let s = render_to_string(&mut r, &ctx, 80, 24);
+            // La description tient entière dans la largeur du sous-menu.
+            assert!(s.contains(TOPICS[sel].desc()), "{s}");
+            render_to_string(&mut r, &ctx, 20, 6);
+        }
+
+        // Caractères manquants.
+        let mut ctx = ctx_with(2);
+        let mut r = Radio::new();
+        assert!(render_to_string(&mut r, &ctx, 80, 24).contains("(characters to unlock)"));
+        for sel in 0..3 {
+            r.sel = sel;
+            r.on_key(key(KeyCode::Enter), &mut ctx);
+            assert!(r.gate.is_some());
+            let s = render_to_string(&mut r, &ctx, 80, 24);
+            assert!(s.contains("Not enough characters unlocked yet for this content."), "{s}");
+            assert!(s.contains("To unlock first: I M S O"), "{s}");
+            assert!(s.contains("Keep going with the Letters or Koch modes to get there."), "{s}");
+            assert!(s.contains("Enter: try anyway with all characters") && s.contains("Esc: back"), "{s}");
+            assert!(!s.contains("débloqu") && !s.contains("Échap") && !s.contains("quand même"), "{s}");
+            render_to_string(&mut r, &ctx, 20, 6);
+            r.on_key(key(KeyCode::Esc), &mut ctx);
+        }
+
+        // Échange complet : écoute, fin d'écoute, correction, bilan.
+        let mut ctx = ctx_with(41);
+        let mut q = Qso::new(false);
+        q.on_enter(&mut ctx);
+        let n = q.txs.len();
+        let s = render_to_string(&mut q, &ctx, 80, 24);
+        assert!(s.contains("Radio – full contact") && s.contains(&format!("Transmission 1 of {n}")), "{s}");
+        assert!(s.contains("Listen and write down what you copy, spaces included."), "{s}");
+        assert!(s.contains("replay from the start") && s.contains("finish"), "{s}");
+        for fr in ["échange", " sur ", "Écoute", "corriger", "réécouter", "terminer"] {
+            assert!(!s.contains(fr), "{fr} : {s}");
+        }
+        render_to_string(&mut q, &ctx, 20, 6);
+        ctx.audio.stop();
+        q.span = None;
+        let s = render_to_string(&mut q, &ctx, 80, 24);
+        assert!(s.contains("Transmission over. Press Enter to see the correction."), "{s}");
+        render_to_string(&mut q, &ctx, 20, 6);
+        type_text(&mut q, &mut ctx, "cq cq");
+        q.on_key(key(KeyCode::Enter), &mut ctx);
+        let s = render_to_string(&mut q, &ctx, 80, 24);
+        assert!(s.contains("The text sent, with your copy below:"), "{s}");
+        assert!(s.contains("Enter: next transmission.") && s.contains("continue"), "{s}");
+        assert!(!s.contains("dessous") && !s.contains("suivante"), "{s}");
+        render_to_string(&mut q, &ctx, 20, 6);
+        q.idx = n - 1;
+        assert!(render_to_string(&mut q, &ctx, 80, 24).contains("Enter: finish the contact."));
+        assert!(matches!(q.on_key(key(KeyCode::Esc), &mut ctx), Nav::Replace(_)));
+        assert_eq!(ctx.stats.sessions.last().unwrap().mode, "Radio – full contact");
+        crate::i18n::set(crate::config::Lang::Fr);
     }
 
     #[test]

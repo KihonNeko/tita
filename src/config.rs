@@ -36,6 +36,9 @@ pub struct Config {
     pub show_pattern_on_error: bool,
     /// Langue des listes de mots.
     pub lang: Lang,
+    /// Langue de l'interface (par défaut : celle du système).
+    #[serde(default = "system_lang")]
+    pub ui_lang: Lang,
     /// "auto" ; sous Linux aussi "pw-cat" ou "aplay".
     pub backend: String,
     /// Si vrai, `save` ne fait rien (tests).
@@ -55,9 +58,21 @@ impl Default for Config {
             unlock_threshold: 0.90,
             show_pattern_on_error: true,
             lang: Lang::Fr,
+            ui_lang: Lang::Fr,
             backend: "auto".into(),
             ephemeral: false,
         }
+    }
+}
+
+/// Français si la langue du système est le français, anglais sinon.
+fn system_lang() -> Lang {
+    let var = ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .iter()
+        .find_map(|k| std::env::var(k).ok().filter(|v| !v.is_empty()));
+    match var {
+        Some(v) if v.to_lowercase().starts_with("fr") => Lang::Fr,
+        _ => Lang::En,
     }
 }
 
@@ -75,9 +90,11 @@ impl Config {
     }
 
     pub fn load() -> Config {
-        path()
-            .and_then(|p| fs::read_to_string(p).ok())
-            .and_then(|s| toml::from_str(&s).ok())
+        // Fichier absent = texte vide : les valeurs par défaut par champ
+        // s'appliquent (dont la langue du système).
+        let text = path().and_then(|p| fs::read_to_string(p).ok()).unwrap_or_default();
+        toml::from_str(&text)
+            .or_else(|_| toml::from_str(""))
             .unwrap_or_default()
     }
 

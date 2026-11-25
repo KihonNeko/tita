@@ -6,6 +6,7 @@
 //! - deux touches (`.`/`j`/← pour le point, `-`/`k`/→ pour le trait), partout.
 
 use crate::app::{Ctx, Nav, Screen, Summary};
+use crate::i18n::t;
 use crate::morse::{self, Seg};
 use crate::picker;
 use crate::ui::{self, bold, dim};
@@ -346,13 +347,14 @@ impl SendMode {
                 }
                 let mut notes = Vec::new();
                 if self.straight() {
-                    notes.push(format!(
+                    notes.push(crate::tr!(
                         "Ton rythme : point d'environ {} ms",
+                        "Your rhythm: dot of about {} ms",
                         self.dec.unit().as_millis()
                     ));
                 }
                 return ctx.finish(Summary {
-                    mode: "Émission".into(),
+                    mode: t("Émission", "Sending").into(),
                     elapsed: self.started.map(|s| now.saturating_duration_since(s)).unwrap_or_default(),
                     total: self.total,
                     correct: self.correct,
@@ -505,20 +507,28 @@ impl Screen for SendMode {
     }
 
     fn draw(&mut self, f: &mut Frame, ctx: &Ctx) {
-        let keys = if self.straight() { "Espace . -" } else { ". -" };
-        let mut hints = vec![(keys, "manipuler"), ("Tab", if self.free { "exercice" } else { "mode libre" })];
+        let keys = if self.straight() { t("Espace . -", "Space . -") } else { ". -" };
+        let other = if self.free { t("exercice", "exercise") } else { t("mode libre", "free mode") };
+        let mut hints = vec![(keys, t("manipuler", "key")), ("Tab", other)];
         if self.free {
-            hints.push(("Retour arr.", "effacer"));
+            hints.push((t("Retour arr.", "Backspace"), t("effacer", "clear")));
         } else {
-            hints.push(("Entrée", "passer"));
+            hints.push((t("Entrée", "Enter"), t("passer", "skip")));
         }
-        hints.push(("Échap", "terminer"));
-        let title = if self.free { "Émission — mode libre" } else { "Émission — exercice" };
+        hints.push((t("Échap", "Esc"), t("terminer", "finish")));
+        let title = if self.free {
+            t("Émission — mode libre", "Sending — free mode")
+        } else {
+            t("Émission — exercice", "Sending — exercise")
+        };
         let area = ui::frame(f, title, &hints);
 
         let mut lines: Vec<Line> = Vec::new();
         if self.free {
-            lines.push(Line::styled("Manipule ce que tu veux : tout est décodé ici.", dim()));
+            lines.push(Line::styled(
+                t("Manipule ce que tu veux : tout est décodé ici.", "Key anything you like: it is all decoded here."),
+                dim(),
+            ));
             lines.push(Line::raw(""));
             // Ne garder que la fin du texte si la place manque.
             let room = (area.width as usize).max(1) * 4;
@@ -530,11 +540,11 @@ impl Screen for SendMode {
                 lines.push(Line::styled(tail, bold(Color::White)));
             }
         } else {
-            lines.push(Line::styled("Émets le texte affiché.", dim()));
+            lines.push(Line::styled(t("Émets le texte affiché.", "Send the text shown."), dim()));
             lines.push(Line::raw(""));
             let pos = self.results.len();
-            let mut top = vec![Span::styled("À émettre  ", dim())];
-            let mut bottom = vec![Span::styled("Décodé     ", dim())];
+            let mut top = vec![Span::styled(t("À émettre  ", "To send    "), dim())];
+            let mut bottom = vec![Span::styled(t("Décodé     ", "Decoded    "), dim())];
             for (i, c) in self.target.iter().enumerate() {
                 let style = match self.results.get(i) {
                     Some((_, true)) => bold(ui::OK),
@@ -559,7 +569,7 @@ impl Screen for SendMode {
         lines.push(Line::raw(""));
 
         let pat = self.dec.pattern();
-        let mut input = vec![Span::styled("Saisie     ", dim())];
+        let mut input = vec![Span::styled(t("Saisie     ", "Input      "), dim())];
         if pat.is_empty() {
             input.push(Span::styled("—", dim()));
         } else {
@@ -573,26 +583,38 @@ impl Screen for SendMode {
         if !self.free {
             match &self.last_miss {
                 Some(m) => {
-                    let mut spans = vec![Span::styled("Erreur     ", dim())];
+                    let mut spans = vec![Span::styled(t("Erreur     ", "Error      "), dim())];
                     let got = match m.got {
-                        Some(c) => format!("reçu {c}  {}", pretty(&m.pattern)),
-                        None => format!("reçu ?  {} (motif inconnu)", pretty(&m.pattern)),
+                        Some(c) => crate::tr!("reçu {c}  {}", "got {c}  {}", pretty(&m.pattern)),
+                        None => crate::tr!(
+                            "reçu ?  {} (motif inconnu)",
+                            "got ?  {} (unknown pattern)",
+                            pretty(&m.pattern)
+                        ),
                     };
                     spans.push(Span::styled(got, Style::default().fg(ui::ERR)));
                     if ctx.cfg.show_pattern_on_error {
                         spans.push(Span::styled(
-                            format!("   attendu {}  {}", m.expected, morse::pretty(m.expected)),
+                            crate::tr!(
+                                "   attendu {}  {}",
+                                "   expected {}  {}",
+                                m.expected,
+                                morse::pretty(m.expected)
+                            ),
                             bold(ui::OK),
                         ));
                     } else {
-                        spans.push(Span::styled(format!("   attendu {}", m.expected), bold(ui::OK)));
+                        spans.push(Span::styled(
+                            crate::tr!("   attendu {}", "   expected {}", m.expected),
+                            bold(ui::OK),
+                        ));
                     }
                     lines.push(Line::from(spans));
                 }
                 None => lines.push(Line::raw("")),
             }
             lines.push(Line::raw(""));
-            let mut score = vec![Span::raw(format!("Justes  {} / {}", self.correct, self.total))];
+            let mut score = vec![Span::raw(crate::tr!("Justes  {} / {}", "Correct  {} / {}", self.correct, self.total))];
             if self.total > 0 {
                 let acc = self.correct as f32 / self.total as f32;
                 score.push(Span::styled(format!("   {:.0} %", acc * 100.0), bold(ui::acc_color(acc))));
@@ -605,27 +627,43 @@ impl Screen for SendMode {
         if self.straight() {
             let unit = self.dec.unit().as_secs_f32();
             lines.push(Line::styled(
-                format!(
+                crate::tr!(
                     "Espace : appui court = point, appui long = trait. Ton point ≈ {:.0} ms ({:.0} mots/min, réglé à {:.0}).",
+                    "Space: short press = dot, long press = dash. Your dot ≈ {:.0} ms ({:.0} wpm, set to {:.0}).",
                     unit * 1000.0,
                     1.2 / unit,
                     nominal.char_wpm
                 ),
                 dim(),
             ));
-            lines.push(Line::styled("Ou deux touches :  .  j  ←  = point     -  k  →  = trait", dim()));
+            lines.push(Line::styled(
+                t(
+                    "Ou deux touches :  .  j  ←  = point     -  k  →  = trait",
+                    "Or two keys:  .  j  ←  = dot     -  k  →  = dash",
+                ),
+                dim(),
+            ));
         } else {
             lines.push(Line::styled(
-                "Deux touches :  .  j  ←  = point     -  k  →  = trait",
+                t(
+                    "Deux touches :  .  j  ←  = point     -  k  →  = trait",
+                    "Two keys:  .  j  ←  = dot     -  k  →  = dash",
+                ),
                 dim(),
             ));
             lines.push(Line::styled(
-                "Ton terminal ne signale pas le relâchement des touches : pas de manipulateur droit (Espace) ici.",
+                t(
+                    "Ton terminal ne signale pas le relâchement des touches : pas de manipulateur droit (Espace) ici.",
+                    "Your terminal does not report key releases: no straight key (Space) here.",
+                ),
                 dim(),
             ));
         }
         lines.push(Line::styled(
-            "Un silence de 3 points termine le caractère, 7 points ajoutent un espace.",
+            t(
+                "Un silence de 3 points termine le caractère, 7 points ajoutent un espace.",
+                "A silence of 3 dots ends the character, 7 dots add a space.",
+            ),
             dim(),
         ));
         f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
@@ -952,6 +990,50 @@ mod tests {
         }
         s.key(k(KeyCode::Enter), &mut ctx, Instant::now());
         assert!((2..=4).contains(&s.target.len()));
+    }
+
+    #[test]
+    fn renders_in_english() {
+        use crate::config::Lang;
+        let mut ctx = Ctx::test();
+        crate::i18n::set(Lang::En);
+        let french = ["Émission", "émettre", "Décodé", "Saisie", "Justes", "Échap", "Entrée", "touches", "terminer", "mots/min"];
+
+        // Exercice, deux touches, avec une erreur affichée.
+        let mut s = SendMode::with_releases(false);
+        s.on_enter(&mut ctx);
+        let t0 = Instant::now();
+        s.target = vec!['N'];
+        s.key(k(KeyCode::Char('.')), &mut ctx, t0);
+        s.tick(&mut ctx, t0 + ms(5000));
+        let out = render_to_string(&mut s, &ctx, 80, 24);
+        for en in ["Sending — exercise", "To send", "Decoded", "Input", "got E", "expected N", "Correct  0 / 1", "Two keys", "Esc", "skip"] {
+            assert!(out.contains(en), "{en} absent :\n{out}");
+        }
+        for fr in french {
+            assert!(!out.contains(fr), "{fr} présent :\n{out}");
+        }
+        render_to_string(&mut s, &ctx, 20, 6);
+
+        // Le nom du mode et les notes du bilan suivent la langue.
+        let nav = s.key(k(KeyCode::Esc), &mut ctx, t0 + ms(6000));
+        assert!(matches!(nav, Nav::Replace(_)));
+        assert_eq!(ctx.stats.sessions.last().unwrap().mode, "Sending");
+
+        // Mode libre, manipulateur droit.
+        let mut s = SendMode::with_releases(true);
+        s.on_enter(&mut ctx);
+        s.key(k(KeyCode::Tab), &mut ctx, t0);
+        let out = render_to_string(&mut s, &ctx, 80, 24);
+        for en in ["Sending — free mode", "Space . -", "Backspace", "short press = dot", "wpm", "Or two keys"] {
+            assert!(out.contains(en), "{en} absent :\n{out}");
+        }
+        for fr in french.iter().chain(&["Espace", "mode libre"]) {
+            assert!(!out.contains(fr), "{fr} présent :\n{out}");
+        }
+        render_to_string(&mut s, &ctx, 20, 6);
+        render_to_string(&mut s, &ctx, 1, 1);
+        crate::i18n::set(Lang::Fr);
     }
 
     #[test]

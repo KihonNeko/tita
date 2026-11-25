@@ -2,6 +2,7 @@
 //! dernières sessions.
 
 use crate::app::{Ctx, Nav, Screen};
+use crate::i18n::t;
 use crate::ui::{self, acc_color, bold, dim};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -10,7 +11,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Paragraph, Wrap};
 use ratatui::Frame;
 
-const TABS: &[&str] = &["Vue d'ensemble", "Caractères", "Sessions"];
+/// Onglets : (français, anglais).
+const TABS: &[(&str, &str)] = &[("Vue d'ensemble", "Overview"), ("Caractères", "Characters"), ("Sessions", "Sessions")];
 /// Largeur d'une cellule du tableau par caractère : `K █████ 100% 9999× 1234ms`.
 const CELL_W: usize = 25;
 const BAR_W: usize = 5;
@@ -41,7 +43,9 @@ fn human(secs: u64) -> String {
 }
 
 fn plural(n: u64, one: &str, many: &str) -> String {
-    format!("{n} {}", if n > 1 { many } else { one })
+    // En anglais, zéro prend aussi le pluriel (« 0 days »).
+    let many_form = n > 1 || (n == 0 && crate::i18n::is_en());
+    format!("{n} {}", if many_form { many } else { one })
 }
 
 /// Complète `spans` avec des espaces jusqu'à `width` colonnes.
@@ -61,12 +65,12 @@ fn overview(ctx: &Ctx) -> Vec<Line<'static>> {
         Line::from(vec![Span::styled(format!("{label:<22}"), dim()), Span::styled(value, bold(Color::White))])
     };
     let mut lines = vec![
-        row("Série", plural(st.streak() as u64, "jour", "jours")),
-        row("Aujourd'hui", human(st.secs_today() as u64)),
-        row("Temps total", human(total_secs)),
+        row(t("Série", "Streak"), plural(st.streak() as u64, t("jour", "day"), t("jours", "days"))),
+        row(t("Aujourd'hui", "Today"), human(st.secs_today() as u64)),
+        row(t("Temps total", "Total time"), human(total_secs)),
         row("Sessions", st.sessions.len().to_string()),
         Line::from(vec![
-            Span::styled(format!("{:<22}", "Caractères débloqués"), dim()),
+            Span::styled(format!("{:<22}", t("Caractères débloqués", "Unlocked characters")), dim()),
             Span::styled(format!("{unlocked} / {total}"), bold(Color::White)),
             Span::styled(
                 format!("  {}  {}", ui::bar(unlocked as f32 / total.max(1) as f32, 20), track.label()),
@@ -76,21 +80,21 @@ fn overview(ctx: &Ctx) -> Vec<Line<'static>> {
     ];
     if let Some(acc) = st.recent_accuracy(&ctx.chars()) {
         lines.push(Line::from(vec![
-            Span::styled(format!("{:<22}", "Précision récente"), dim()),
+            Span::styled(format!("{:<22}", t("Précision récente", "Recent accuracy")), dim()),
             Span::styled(format!("{:.0} %", acc * 100.0), bold(acc_color(acc))),
-            Span::styled("  (caractères débloqués)", dim()),
+            Span::styled(t("  (caractères débloqués)", "  (unlocked characters)"), dim()),
         ]));
     }
     lines.push(Line::raw(""));
-    lines.push(Line::styled("Principales confusions", bold(ui::ACCENT)));
+    lines.push(Line::styled(t("Principales confusions", "Main confusions"), bold(ui::ACCENT)));
     let conf = st.top_confusions(TOP_CONFUSIONS);
     if conf.is_empty() {
-        lines.push(Line::styled("Aucune confusion enregistrée.", dim()));
+        lines.push(Line::styled(t("Aucune confusion enregistrée.", "No confusion recorded."), dim()));
     }
     for (sent, typed, n) in conf {
         lines.push(Line::from(vec![
             Span::styled(format!("  {sent}"), bold(Color::White)),
-            Span::styled(" pris pour ", dim()),
+            Span::styled(t(" pris pour ", " mistaken for "), dim()),
             Span::styled(typed.to_string(), bold(ui::ERR)),
             Span::styled(format!("  ×{n}"), dim()),
         ]));
@@ -139,7 +143,13 @@ impl StatsScreen {
         let visible = (area.height as usize).saturating_sub(2).max(1);
         self.scroll = self.scroll.min(rows.saturating_sub(visible));
 
-        let head = format!("  {:<10} {:>5} {:>6}", "précision", "vu", "réact.");
+        // Les titres tiennent dans les mêmes largeurs dans les deux langues.
+        let head = format!(
+            "  {:<10} {:>5} {:>6}",
+            t("précision", "accuracy"),
+            t("vu", "seen"),
+            t("réact.", "react.")
+        );
         let mut header = Vec::new();
         for _ in 0..cols {
             header.push(Span::styled(head.clone(), dim()));
@@ -156,9 +166,12 @@ impl StatsScreen {
             }
             lines.push(Line::from(spans));
         }
-        let more = if rows > visible { "↑↓ pour faire défiler · " } else { "" };
+        let more = if rows > visible { t("↑↓ pour faire défiler · ", "↑↓ to scroll · ") } else { "" };
         lines.push(Line::styled(
-            format!("{more}Précision : 30 dernières réponses · en gris : jamais vu"),
+            crate::tr!(
+                "{more}Précision : 30 dernières réponses · en gris : jamais vu",
+                "{more}Accuracy: last 30 answers · in grey: never seen"
+            ),
             dim(),
         ));
         lines
@@ -167,7 +180,14 @@ impl StatsScreen {
 
 fn sessions(ctx: &Ctx) -> Vec<Line<'static>> {
     let mut lines = vec![Line::styled(
-        format!("{:<10}  {:<18} {:>6}  {:>9}  {}", "Date", "Mode", "Durée", "Précision", "Vitesse"),
+        format!(
+            "{:<10}  {:<18} {:>6}  {:>9}  {}",
+            "Date",
+            "Mode",
+            t("Durée", "Time"),
+            t("Précision", "Accuracy"),
+            t("Vitesse", "Speed")
+        ),
         dim(),
     )];
     for s in ctx.stats.sessions.iter().rev().take(LAST_SESSIONS) {
@@ -176,14 +196,18 @@ fn sessions(ctx: &Ctx) -> Vec<Line<'static>> {
         lines.push(Line::from(vec![
             Span::raw(format!("{:<10}  {:<18} {:>6}  ", s.date, mode, ui::mmss(s.secs as u64))),
             Span::styled(format!("{:>7.0} %", acc * 100.0), Style::default().fg(acc_color(acc))),
-            Span::styled(format!("  {:.0}/{:.0} mots/min", s.char_wpm, s.eff_wpm), dim()),
+            Span::styled(crate::tr!("  {:.0}/{:.0} mots/min", "  {:.0}/{:.0} wpm", s.char_wpm, s.eff_wpm), dim()),
         ]));
     }
     if ctx.stats.sessions.is_empty() {
-        lines.push(Line::styled("Aucune session terminée pour l'instant.", dim()));
+        lines.push(Line::styled(t("Aucune session terminée pour l'instant.", "No finished session yet."), dim()));
     } else if ctx.stats.sessions.len() > LAST_SESSIONS {
         lines.push(Line::styled(
-            format!("… et {} plus anciennes.", ctx.stats.sessions.len() - LAST_SESSIONS),
+            crate::tr!(
+                "… et {} plus anciennes.",
+                "… and {} older.",
+                ctx.stats.sessions.len() - LAST_SESSIONS
+            ),
             dim(),
         ));
     }
@@ -220,16 +244,20 @@ impl Screen for StatsScreen {
     fn draw(&mut self, f: &mut Frame, ctx: &Ctx) {
         let empty = ctx.stats.sessions.is_empty() && ctx.stats.chars.values().all(|c| c.seen == 0);
         if empty {
-            let area = ui::frame(f, "Statistiques", &[("Échap", "retour")]);
+            let area = ui::frame(f, t("Statistiques", "Statistics"), &[(t("Échap", "Esc"), t("retour", "back"))]);
             let track = ctx.cfg.track;
             let lines = vec![
-                Line::styled("Pas encore de statistiques.", bold(ui::ACCENT)),
+                Line::styled(t("Pas encore de statistiques.", "No statistics yet."), bold(ui::ACCENT)),
                 Line::raw(""),
-                Line::raw("Lance une session de « Lettres » depuis le menu : ta précision, tes temps de réaction, tes confusions et tes sessions apparaîtront ici."),
+                Line::raw(t(
+                    "Lance une session de « Lettres » depuis le menu : ta précision, tes temps de réaction, tes confusions et tes sessions apparaîtront ici.",
+                    "Start a \"Letters\" session from the menu: your accuracy, reaction times, confusions and sessions will appear here.",
+                )),
                 Line::raw(""),
                 Line::styled(
-                    format!(
+                    crate::tr!(
                         "Parcours {} : {} caractères débloqués sur {}.",
+                        "Track {}: {} of {} characters unlocked.",
                         track.label(),
                         ctx.stats.unlocked(track),
                         track.order().len()
@@ -245,17 +273,17 @@ impl Screen for StatsScreen {
 
         let area = ui::frame(
             f,
-            "Statistiques",
-            &[("Tab ←→", "onglet"), ("↑↓", "défiler"), ("Échap", "retour")],
+            t("Statistiques", "Statistics"),
+            &[("Tab ←→", t("onglet", "tab")), ("↑↓", t("défiler", "scroll")), (t("Échap", "Esc"), t("retour", "back"))],
         );
         let [tabs, body] = Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).areas(area);
         let mut spans = Vec::new();
-        for (i, name) in TABS.iter().enumerate() {
+        for (i, (fr, en)) in TABS.iter().enumerate() {
             if i > 0 {
                 spans.push(Span::styled("  │  ", dim()));
             }
             let style = if i == self.tab { bold(ui::ACCENT) } else { dim() };
-            spans.push(Span::styled(name.to_string(), style));
+            spans.push(Span::styled(t(fr, en), style));
         }
         f.render_widget(Paragraph::new(Line::from(spans)), tabs);
 
@@ -409,6 +437,61 @@ mod tests {
             s.on_key(k(KeyCode::Right), &mut ctx);
         }
         assert_eq!(s.tab, 0);
+    }
+
+    #[test]
+    fn renders_in_english() {
+        use crate::config::Lang;
+        crate::i18n::set(Lang::En);
+        let french = ["Statistiques", "Série", "jour", "Aujourd", "Caractères", "Précision", "pris pour", "Échap", "retour", "onglet", "mots/min", "Durée", "Vitesse", "anciennes", "défiler"];
+        let absent = |out: &str| {
+            for fr in french {
+                assert!(!out.contains(fr), "{fr} présent :\n{out}");
+            }
+        };
+
+        // Écran vide.
+        let empty = Ctx::test();
+        let mut s = StatsScreen::new();
+        let out = render_to_string(&mut s, &empty, 80, 24);
+        assert!(out.contains("No statistics yet") && out.contains("Letters") && out.contains("Esc"), "{out}");
+        assert!(out.contains("characters unlocked."), "texte tronqué :\n{out}");
+        assert!(!out.contains("Pas encore") && !out.contains("Parcours"), "{out}");
+        absent(&out);
+        render_to_string(&mut s, &empty, 20, 6);
+
+        // Vue d'ensemble.
+        let mut ctx = filled();
+        let out = render_to_string(&mut s, &ctx, 80, 24);
+        for en in ["Statistics", "Overview", "Characters", "Streak", "1 day ", "Today", "Total time", "Unlocked characters", "Recent accuracy", "Main confusions", "S mistaken for H", "scroll", "back"] {
+            assert!(out.contains(en), "{en} absent :\n{out}");
+        }
+        absent(&out);
+        render_to_string(&mut s, &ctx, 20, 6);
+
+        // Tableau par caractère : mêmes cellules, titres anglais.
+        s.on_key(k(KeyCode::Tab), &mut ctx);
+        let out = render_to_string(&mut s, &ctx, 80, 24);
+        assert!(out.contains("  accuracy    seen react."), "{out}");
+        assert!(out.contains("↑↓ to scroll · Accuracy: last 30 answers · in grey: never seen"), "{out}");
+        absent(&out);
+        render_to_string(&mut s, &ctx, 20, 6);
+
+        // Sessions : les noms de mode enregistrés restent tels quels.
+        s.on_key(k(KeyCode::Tab), &mut ctx);
+        let out = render_to_string(&mut s, &ctx, 80, 24);
+        for en in ["Time", "Accuracy", "Speed", "20/8 wpm", "… and 3 older.", "Flux", "Lettres"] {
+            assert!(out.contains(en), "{en} absent :\n{out}");
+        }
+        absent(&out);
+        for (w, h) in [(20, 6), (1, 1)] {
+            render_to_string(&mut s, &ctx, w, h);
+        }
+
+        assert_eq!(plural(0, "day", "days"), "0 days");
+        assert_eq!(plural(1, "day", "days"), "1 day");
+        crate::i18n::set(Lang::Fr);
+        assert_eq!(plural(0, "jour", "jours"), "0 jour");
     }
 
     #[test]

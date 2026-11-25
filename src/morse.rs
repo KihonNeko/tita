@@ -28,15 +28,16 @@ pub fn up(c: char) -> char {
 
 /// Signification radio des caractères qui servent aussi de signal spécial.
 pub fn meaning(c: char) -> Option<&'static str> {
+    use crate::i18n::t;
     Some(match c {
-        '+' => "AR — fin de message",
-        '=' => "BT — séparation, nouveau paragraphe",
-        '(' => "KN — à toi, et à toi seul",
-        '&' => "AS — attends",
-        '<' => "KA — début de transmission",
-        '>' => "SK — fin du contact",
-        '#' => "HH — erreur, je corrige (8 points)",
-        '*' => "SOS — détresse",
+        '+' => t("AR — fin de message", "AR — end of message"),
+        '=' => t("BT — séparation, nouveau paragraphe", "BT — break, new paragraph"),
+        '(' => t("KN — à toi, et à toi seul", "KN — over to you, and you only"),
+        '&' => t("AS — attends", "AS — wait"),
+        '<' => t("KA — début de transmission", "KA — start of transmission"),
+        '>' => t("SK — fin du contact", "SK — end of contact"),
+        '#' => t("HH — erreur, je corrige (8 points)", "HH — error, correcting (8 dots)"),
+        '*' => t("SOS — détresse", "SOS — distress"),
         _ => return None,
     })
 }

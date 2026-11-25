@@ -155,6 +155,35 @@ mod tests {
     }
 
     #[test]
+    fn english_interface() {
+        crate::i18n::set(crate::config::Lang::En);
+        let (mut h, mut ctx) = started(26);
+        for (w, ht) in [(80, 24), (20, 6)] {
+            render_to_string(&mut h, &ctx, w, ht);
+        }
+        let s = render_to_string(&mut h, &ctx, 80, 24);
+        assert!(s.contains("Head copy") && s.contains("Listen…"), "{s}");
+        assert!(s.contains("· up to 3 letters") && s.contains("0 words"), "{s}");
+        for fr in ["Copie de tête", "Écoute", "jusqu'à", "lettres", "Entrée", "Échap"] {
+            assert!(!s.contains(fr), "{fr} : {s}");
+        }
+        h.0.skip_wait(&mut ctx);
+        let s = render_to_string(&mut h, &ctx, 80, 24);
+        assert!(s.contains("Type what you heard.") && !s.contains("Listen…"), "{s}");
+        let word = h.0.current_text();
+        type_text(&mut h, &mut ctx, &word);
+        h.on_key(key(KeyCode::Enter), &mut ctx);
+        for (w, ht) in [(80, 24), (20, 6)] {
+            render_to_string(&mut h, &ctx, w, ht);
+        }
+        let s = render_to_string(&mut h, &ctx, 80, 24);
+        assert!(s.contains("Correct!") && !s.contains("Juste"), "{s}");
+        assert!(matches!(h.on_key(key(KeyCode::Esc), &mut ctx), Nav::Replace(_)));
+        assert_eq!(ctx.stats.sessions.last().unwrap().mode, "Head copy");
+        crate::i18n::set(crate::config::Lang::Fr);
+    }
+
+    #[test]
     fn works_with_two_characters_and_small_terminals() {
         let (mut h, mut ctx) = started(2);
         for _ in 0..30 {

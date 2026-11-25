@@ -3,6 +3,7 @@
 //! reçoivent l'instant courant (testable sans attendre).
 
 use crate::app::{Ctx, Nav, Screen, Summary};
+use crate::i18n::t;
 use crate::morse;
 use crate::picker;
 use crate::ui::{self, acc_color, bold, dim};
@@ -81,7 +82,7 @@ impl Drill {
     }
 
     fn name(&self) -> &'static str {
-        if self.endless { "Lettres sans fin" } else { "Lettres" }
+        if self.endless { t("Lettres sans fin", "Endless letters") } else { t("Lettres", "Letters") }
     }
 
     fn elapsed(&self, now: Instant) -> Duration {
@@ -103,10 +104,14 @@ impl Drill {
         };
         let mut notes = Vec::new();
         if let Some(avg) = self.avg_rt() {
-            notes.push(format!("Réaction    {} ms en moyenne", avg.as_millis()));
+            notes.push(crate::tr!("Réaction    {} ms en moyenne", "Reaction    {} ms on average", avg.as_millis()));
         }
         if self.best_streak > 1 {
-            notes.push(format!("Série       {} bonnes réponses d'affilée", self.best_streak));
+            notes.push(crate::tr!(
+                "Série       {} bonnes réponses d'affilée",
+                "Streak      {} correct answers in a row",
+                self.best_streak
+            ));
         }
         ctx.finish(Summary {
             mode: self.name().into(),
@@ -247,29 +252,29 @@ impl Drill {
     fn status_line(&self, ctx: &Ctx, now: Instant) -> Line<'static> {
         let secs = self.elapsed(now).as_secs();
         let (label, clock) = if self.endless {
-            ("Écoulé ", ui::mmss(secs))
+            (t("Écoulé ", "Elapsed "), ui::mmss(secs))
         } else {
-            ("Reste ", ui::mmss((ctx.cfg.session_secs as u64).saturating_sub(secs)))
+            (t("Reste ", "Left "), ui::mmss((ctx.cfg.session_secs as u64).saturating_sub(secs)))
         };
         let mut spans = vec![Span::styled(label, dim()), Span::styled(clock, bold(ui::ACCENT))];
-        spans.push(Span::styled("   Précision ", dim()));
+        spans.push(Span::styled(t("   Précision ", "   Accuracy "), dim()));
         if self.total > 0 {
             let acc = self.correct as f32 / self.total as f32;
-            spans.push(Span::styled(format!("{:.0} %", acc * 100.0), bold(acc_color(acc))));
+            spans.push(Span::styled(crate::tr!("{:.0} %", "{:.0}%", acc * 100.0), bold(acc_color(acc))));
             spans.push(Span::styled(format!(" ({}/{})", self.correct, self.total), dim()));
         } else {
             spans.push(Span::styled("—", dim()));
         }
-        spans.push(Span::styled("   Série ", dim()));
+        spans.push(Span::styled(t("   Série ", "   Streak "), dim()));
         spans.push(Span::raw(self.streak.to_string()));
-        spans.push(Span::styled("   Réaction ", dim()));
+        spans.push(Span::styled(t("   Réaction ", "   Reaction "), dim()));
         match self.last_rt {
             Some(rt) => spans.push(Span::raw(format!("{} ms", rt.as_millis()))),
             None => spans.push(Span::styled("—", dim())),
         }
         if self.endless {
             if let Some(avg) = self.avg_rt() {
-                spans.push(Span::styled("   Moyenne ", dim()));
+                spans.push(Span::styled(t("   Moyenne ", "   Average "), dim()));
                 spans.push(Span::styled(format!("{} ms", avg.as_millis()), bold(ui::ACCENT)));
             }
         }
@@ -292,7 +297,11 @@ impl Screen for Drill {
 
     fn draw(&mut self, f: &mut Frame, ctx: &Ctx) {
         let now = Instant::now();
-        let area = ui::frame(f, self.name(), &[("Espace", "rejouer"), ("Échap", "terminer")]);
+        let area = ui::frame(
+            f,
+            self.name(),
+            &[(t("Espace", "Space"), t("rejouer", "replay")), (t("Échap", "Esc"), t("terminer", "finish"))],
+        );
         let [top, mid, bottom] = Layout::vertical([
             Constraint::Length(2),
             Constraint::Min(1),
@@ -307,13 +316,16 @@ impl Screen for Drill {
         let mut lines: Vec<Line> = Vec::new();
         match self.phase {
             Phase::Ready => {
-                lines.push(Line::styled("Prêt ? Appuie sur une touche.", bold(ui::ACCENT)));
+                lines.push(Line::styled(t("Prêt ? Appuie sur une touche.", "Ready? Press any key."), bold(ui::ACCENT)));
                 lines.push(Line::raw(""));
-                lines.push(Line::styled("Un caractère joue, tu tapes sa touche.", dim()));
+                lines.push(Line::styled(
+                    t("Un caractère joue, tu tapes sa touche.", "A character plays, you type its key."),
+                    dim(),
+                ));
                 let rule = if self.endless {
-                    "Pas de limite de durée : Échap pour terminer.".to_string()
+                    t("Pas de limite de durée : Échap pour terminer.", "No time limit: Esc to finish.").to_string()
                 } else {
-                    format!("Session de {}.", ui::mmss(ctx.cfg.session_secs as u64))
+                    crate::tr!("Session de {}.", "{} session.", ui::mmss(ctx.cfg.session_secs as u64))
                 };
                 lines.push(Line::styled(rule, dim()));
             }
@@ -324,7 +336,7 @@ impl Screen for Drill {
                     Some((c, t)) if self.endless && now.saturating_duration_since(t) < FLASH => {
                         lines.push(Line::styled(format!("✓ {c}"), bold(ui::OK)))
                     }
-                    _ => lines.push(Line::styled("Écoute, puis tape le caractère.", dim())),
+                    _ => lines.push(Line::styled(t("Écoute, puis tape le caractère.", "Listen, then type the character."), dim())),
                 }
             }
             Phase::Pause { .. } => {
@@ -346,7 +358,10 @@ impl Screen for Drill {
                     lines.push(Line::raw(""));
                 }
                 lines.push(Line::styled(
-                    format!("Tu as tapé {typed}. C'était {c} : tape-le pour continuer."),
+                    crate::tr!(
+                        "Tu as tapé {typed}. C'était {c} : tape-le pour continuer.",
+                        "You typed {typed}. It was {c}: type it to continue."
+                    ),
                     dim(),
                 ));
             }
@@ -564,5 +579,54 @@ mod tests {
             assert_eq!(d.history.len(), HISTORY);
             assert!(render_to_string(&mut d, &ctx, 80, 24).contains("Précision"));
         }
+    }
+
+    #[test]
+    fn english_interface() {
+        crate::i18n::set(crate::config::Lang::En);
+        let sizes = [(80, 24), (20, 6)];
+        for endless in [false, true] {
+            let mut ctx = Ctx::test();
+            let mut d = Drill::new(endless);
+            let s = render_to_string(&mut d, &ctx, 80, 24);
+            assert!(s.contains("Ready? Press any key.") && s.contains("you type its key"), "{s}");
+            assert!(s.contains(if endless { "Endless letters" } else { "Letters" }), "{s}");
+            assert!(s.contains(if endless { "No time limit" } else { "session." }), "{s}");
+            assert!(!s.contains("Prêt") && !s.contains("Lettres") && !s.contains("Échap"), "{s}");
+            render_to_string(&mut d, &ctx, 20, 6);
+
+            d.key_at(key('x'), &mut ctx, Instant::now());
+            let s = render_to_string(&mut d, &ctx, 100, 24);
+            assert!(s.contains("Accuracy") && s.contains("Streak") && s.contains("Reaction"), "{s}");
+            assert!(s.contains(if endless { "Elapsed" } else { "Left" }), "{s}");
+            assert!(s.contains("Listen, then type the character."), "{s}");
+            assert!(!s.contains("Précision") && !s.contains("Série") && !s.contains("Écoute"), "{s}");
+
+            // Erreur, correction, puis une bonne réponse.
+            let c = d.current.unwrap();
+            let t = d.sound_end + Duration::from_millis(250);
+            d.key_at(key(other(&ctx, c)), &mut ctx, t);
+            let s = render_to_string(&mut d, &ctx, 80, 24);
+            assert!(s.contains("It was") && s.contains("type it to continue") && !s.contains("C'était"), "{s}");
+            for (w, h) in sizes {
+                render_to_string(&mut d, &ctx, w, h);
+            }
+            d.key_at(key(c), &mut ctx, t);
+            d.tick_at(&mut ctx, t + NEXT_DELAY);
+            let c = d.current.unwrap();
+            let t = d.sound_end + Duration::from_millis(250);
+            d.key_at(key(c), &mut ctx, t);
+            let s = render_to_string(&mut d, &ctx, 100, 24);
+            assert!(s.contains("50%") && !s.contains("50 %"), "{s}");
+            assert_eq!(s.contains("Average"), endless, "{s}");
+            for (w, h) in sizes {
+                render_to_string(&mut d, &ctx, w, h);
+            }
+
+            assert!(matches!(d.key_at(KeyEvent::from(KeyCode::Esc), &mut ctx, t), Nav::Replace(_)));
+            let name = if endless { "Endless letters" } else { "Letters" };
+            assert_eq!(ctx.stats.sessions.last().unwrap().mode, name);
+        }
+        crate::i18n::set(crate::config::Lang::Fr);
     }
 }

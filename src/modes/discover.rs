@@ -2,6 +2,7 @@
 //! vérification à l'oreille quand la liste est petite.
 
 use crate::app::{Ctx, Nav, Screen};
+use crate::i18n::t;
 use crate::morse;
 use crate::ui::{self, bold, dim};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -181,12 +182,16 @@ impl Screen for Discover {
     fn draw(&mut self, f: &mut Frame, _ctx: &Ctx) {
         let n = self.chars.len();
         let mut lines: Vec<Line> = Vec::new();
-        let hints: &[(&str, &str)];
+        let hints: Vec<(&str, &str)>;
         match &self.phase {
             Phase::Present => {
-                hints = &[("Espace", "rejouer"), ("← →", "précédent / suivant"), ("Échap", "retour")];
+                hints = vec![
+                    (t("Espace", "Space"), t("rejouer", "replay")),
+                    ("← →", t("précédent / suivant", "previous / next")),
+                    (t("Échap", "Esc"), t("retour", "back")),
+                ];
                 if n == 0 {
-                    lines.push(Line::styled("Aucun caractère à découvrir.", dim()));
+                    lines.push(Line::styled(t("Aucun caractère à découvrir.", "No character to discover."), dim()));
                 } else {
                     let c = self.chars[self.idx];
                     lines.push(Line::styled(format!("{} / {}", self.idx + 1, n), dim()));
@@ -211,18 +216,28 @@ impl Screen for Discover {
                     lines.push(Line::from(strip));
                     lines.push(Line::raw(""));
                     let next = if self.idx + 1 < n {
-                        "Écoute bien le rythme, puis passe au suivant."
+                        t("Écoute bien le rythme, puis passe au suivant.", "Listen closely to the rhythm, then move on to the next.")
                     } else if self.has_check() {
-                        "Dernier caractère. Ensuite : petite vérification à l'oreille."
+                        t(
+                            "Dernier caractère. Ensuite : petite vérification à l'oreille.",
+                            "Last character. Next: a short check by ear.",
+                        )
                     } else {
-                        "Dernier caractère. Entrée pour terminer."
+                        t("Dernier caractère. Entrée pour terminer.", "Last character. Enter to finish.")
                     };
                     lines.push(Line::styled(next, dim()));
                 }
             }
             Phase::Check { queue, wrong } => {
-                hints = &[("Espace", "rejouer"), ("←", "revoir"), ("Échap", "retour")];
-                lines.push(Line::styled(format!("Vérification : {} / {} réussis", n - queue.len(), n), dim()));
+                hints = vec![
+                    (t("Espace", "Space"), t("rejouer", "replay")),
+                    ("←", t("revoir", "review")),
+                    (t("Échap", "Esc"), t("retour", "back")),
+                ];
+                lines.push(Line::styled(
+                    crate::tr!("Vérification : {} / {} réussis", "Check: {} / {} correct", n - queue.len(), n),
+                    dim(),
+                ));
                 lines.push(Line::raw(""));
                 match wrong {
                     Some(typed) => {
@@ -236,7 +251,10 @@ impl Screen for Discover {
                             lines.push(Line::raw(""));
                         }
                         lines.push(Line::styled(
-                            format!("Tu as tapé {typed}. C'était {c} : tape-le pour continuer."),
+                            crate::tr!(
+                                "Tu as tapé {typed}. C'était {c} : tape-le pour continuer.",
+                                "You typed {typed}. It was {c}: type it to continue."
+                            ),
                             dim(),
                         ));
                     }
@@ -250,12 +268,15 @@ impl Screen for Discover {
                             _ => lines.push(Line::raw("")),
                         }
                         lines.push(Line::raw(""));
-                        lines.push(Line::styled("Écoute, puis tape le caractère entendu.", dim()));
+                        lines.push(Line::styled(
+                            t("Écoute, puis tape le caractère entendu.", "Listen, then type the character you heard."),
+                            dim(),
+                        ));
                     }
                 }
             }
         }
-        let area = ui::frame(f, "Découverte", hints);
+        let area = ui::frame(f, t("Découverte", "Discovery"), &hints);
         let h = lines.len() as u16;
         f.render_widget(
             Paragraph::new(lines).alignment(Alignment::Center),
@@ -362,5 +383,42 @@ mod tests {
         e.on_enter(&mut ctx);
         render_to_string(&mut e, &ctx, 20, 6);
         assert!(matches!(e.on_key(key(KeyCode::Right), &mut ctx), Nav::Back));
+    }
+
+    #[test]
+    fn english_interface() {
+        crate::i18n::set(crate::config::Lang::En);
+        let mut ctx = Ctx::test();
+        let sizes = [(80, 24), (20, 6)];
+        let mut d = Discover::new(vec!['E', 'T']);
+        d.on_enter(&mut ctx);
+        let s = render_to_string(&mut d, &ctx, 80, 24);
+        assert!(s.contains("Discovery") && s.contains("Listen closely") && s.contains("replay"), "{s}");
+        assert!(!s.contains("Découverte") && !s.contains("Écoute") && !s.contains("Échap"), "{s}");
+        for (w, h) in sizes {
+            render_to_string(&mut d, &ctx, w, h);
+        }
+        d.on_key(key(KeyCode::Right), &mut ctx);
+        let s = render_to_string(&mut d, &ctx, 80, 24);
+        assert!(s.contains("a short check by ear") && !s.contains("Dernier"), "{s}");
+        d.on_key(key(KeyCode::Right), &mut ctx);
+        let s = render_to_string(&mut d, &ctx, 80, 24);
+        assert!(s.contains("Check: 0 / 2 correct") && s.contains("type the character you heard"), "{s}");
+        assert!(!s.contains("Vérification") && !s.contains("rejouer"), "{s}");
+        let first = expected(&d);
+        let other = if first == 'E' { 'T' } else { 'E' };
+        d.on_key(key(KeyCode::Char(other)), &mut ctx);
+        let s = render_to_string(&mut d, &ctx, 80, 24);
+        assert!(s.contains("It was") && !s.contains("C'était"), "{s}");
+        for (w, h) in sizes {
+            render_to_string(&mut d, &ctx, w, h);
+        }
+        let mut long = Discover::new("ETAINMSURWDK".chars().collect());
+        long.on_key(key(KeyCode::End), &mut ctx);
+        assert!(render_to_string(&mut long, &ctx, 80, 24).contains("Enter to finish"));
+        let mut e = Discover::new(vec![]);
+        assert!(render_to_string(&mut e, &ctx, 80, 24).contains("No character to discover"));
+        render_to_string(&mut e, &ctx, 20, 6);
+        crate::i18n::set(crate::config::Lang::Fr);
     }
 }

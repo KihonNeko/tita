@@ -3,6 +3,8 @@
 use crate::app::{Ctx, Nav, Screen};
 use crate::curriculum::{self, Track};
 use crate::modes;
+use crate::i18n::t;
+use crate::tr;
 use crate::ui::{self, bold, dim};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::{Constraint, Layout};
@@ -10,19 +12,42 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 
-const ITEMS: &[(&str, &str)] = &[
-    ("Lettres", "Une lettre joue, tu tapes la touche. Le cœur de l'apprentissage."),
-    ("Lettres sans fin", "Pareil, sans limite de durée : travaille le temps de réaction."),
-    ("Découverte", "Réécouter les caractères débloqués avec leur motif."),
-    ("Koch", "Groupes de 5 caractères à pleine vitesse, score à la fin."),
-    ("Flux", "Flux continu qui ne t'attend pas, vitesse auto-adaptative."),
-    ("Mots", "Mots fréquents composés des lettres déjà apprises."),
-    ("Copie de tête", "Le mot entier joue, tu ne tapes qu'à la fin."),
-    ("Radio", "Indicatifs, codes Q, abréviations, échanges simulés."),
-    ("Émission", "Manipule au clavier, l'appli décode ton rythme."),
-    ("Statistiques", "Précision et temps de réaction par caractère, confusions."),
-    ("Réglages", "Vitesses, tonalité, volume, parcours, durée de session."),
-    ("Quitter", ""),
+/// (nom fr, nom en, description fr, description en)
+const ITEMS: &[(&str, &str, &str, &str)] = &[
+    ("Lettres", "Letters",
+     "Une lettre joue, tu tapes la touche. Le cœur de l'apprentissage.",
+     "A letter plays, you press its key. The core of the training."),
+    ("Lettres sans fin", "Endless letters",
+     "Pareil, sans limite de durée : travaille le temps de réaction.",
+     "Same, with no time limit: trains reaction time."),
+    ("Découverte", "Discover",
+     "Réécouter les caractères débloqués avec leur motif.",
+     "Listen again to the unlocked characters with their pattern."),
+    ("Koch", "Koch",
+     "Groupes de 5 caractères à pleine vitesse, score à la fin.",
+     "Groups of 5 characters at full speed, graded at the end."),
+    ("Flux", "Stream",
+     "Flux continu qui ne t'attend pas, vitesse auto-adaptative.",
+     "A continuous stream that does not wait for you, self-adjusting speed."),
+    ("Mots", "Words",
+     "Mots fréquents composés des lettres déjà apprises.",
+     "Common words made of the letters you already know."),
+    ("Copie de tête", "Head copy",
+     "Le mot entier joue, tu ne tapes qu'à la fin.",
+     "The whole word plays, you only type at the end."),
+    ("Radio", "Radio",
+     "Indicatifs, codes Q, abréviations, échanges simulés.",
+     "Callsigns, Q codes, abbreviations, simulated contacts."),
+    ("Émission", "Sending",
+     "Manipule au clavier, l'appli décode ton rythme.",
+     "Key with the keyboard, the app decodes your rhythm."),
+    ("Statistiques", "Statistics",
+     "Précision et temps de réaction par caractère, confusions.",
+     "Accuracy and reaction time per character, confusions."),
+    ("Réglages", "Settings",
+     "Vitesses, tonalité, volume, parcours, durée de session, langue.",
+     "Speeds, tone, volume, learning order, session length, language."),
+    ("Quitter", "Quit", "", ""),
 ];
 
 pub struct Menu {
@@ -75,8 +100,12 @@ impl Screen for Menu {
     fn draw(&mut self, f: &mut Frame, ctx: &Ctx) {
         let area = ui::frame(
             f,
-            "Apprendre le Morse à l'oreille",
-            &[("↑↓", "choisir"), ("Entrée", "lancer"), ("q", "quitter")],
+            t("Apprendre le Morse à l'oreille", "Learn Morse code by ear"),
+            &[
+                ("↑↓", t("choisir", "choose")),
+                (t("Entrée", "Enter"), t("lancer", "start")),
+                ("q", t("quitter", "quit")),
+            ],
         );
         let [status, _, list, desc] = Layout::vertical([
             Constraint::Length(3),
@@ -93,13 +122,14 @@ impl Screen for Menu {
         let place = match track {
             Track::Lessons => {
                 let i = curriculum::lesson_index(unlocked);
-                format!("Leçon {} — {}", i + 1, curriculum::LESSONS[i].title)
+                tr!("Leçon {} — {}", "Lesson {} — {}", i + 1, curriculum::LESSONS[i].title())
             }
-            Track::Koch => format!("Koch — {unlocked} caractères"),
+            Track::Koch => tr!("Koch — {unlocked} caractères", "Koch — {unlocked} characters"),
         };
         let mut l3 = vec![Span::styled(
-            format!(
+            tr!(
                 "{:.0}/{:.0} mots/min · série {} j · aujourd'hui {}",
+                "{:.0}/{:.0} wpm · {}-day streak · today {}",
                 ctx.cfg.char_wpm,
                 ctx.cfg.eff_wpm,
                 ctx.stats.streak(),
@@ -109,9 +139,12 @@ impl Screen for Menu {
         )];
         if !ctx.audio.available {
             l3.push(Span::styled(if cfg!(target_os = "linux") {
-                    "   ⚠ pas de sortie audio (pw-cat / aplay introuvable)"
+                    t(
+                        "   ⚠ pas de sortie audio (pw-cat / aplay introuvable)",
+                        "   ⚠ no audio output (pw-cat / aplay not found)",
+                    )
                 } else {
-                    "   ⚠ pas de sortie audio"
+                    t("   ⚠ pas de sortie audio", "   ⚠ no audio output")
                 }, bold(ui::ERR)));
         }
         f.render_widget(
@@ -120,7 +153,7 @@ impl Screen for Menu {
                     Span::styled(place, bold(ui::ACCENT)),
                     Span::styled(format!("   {} {unlocked}/{total}", ui::bar(unlocked as f32 / total as f32, 20)), dim()),
                 ]),
-                Line::from(vec![Span::styled("Débloqués : ", dim()), Span::raw(chars)]),
+                Line::from(vec![Span::styled(t("Débloqués : ", "Unlocked: "), dim()), Span::raw(chars)]),
                 Line::from(l3),
             ]),
             status,
@@ -129,7 +162,8 @@ impl Screen for Menu {
         let lines: Vec<Line> = ITEMS
             .iter()
             .enumerate()
-            .map(|(i, (name, _))| {
+            .map(|(i, (fr, en, _, _))| {
+                let name = t(fr, en);
                 if i == self.sel {
                     Line::styled(format!(" ▶ {name}"), bold(ui::ACCENT))
                 } else {
@@ -138,6 +172,6 @@ impl Screen for Menu {
             })
             .collect();
         f.render_widget(Paragraph::new(lines), list);
-        f.render_widget(Paragraph::new(Line::styled(ITEMS[self.sel].1, dim())), desc);
+        f.render_widget(Paragraph::new(Line::styled(t(ITEMS[self.sel].2, ITEMS[self.sel].3), dim())), desc);
     }
 }
