@@ -108,7 +108,11 @@ impl Screen for Menu {
             dim(),
         )];
         if !ctx.audio.available {
-            l3.push(Span::styled("   ⚠ pas de sortie audio (pw-cat / aplay introuvable)", bold(ui::ERR)));
+            l3.push(Span::styled(if cfg!(target_os = "linux") {
+                    "   ⚠ pas de sortie audio (pw-cat / aplay introuvable)"
+                } else {
+                    "   ⚠ pas de sortie audio"
+                }, bold(ui::ERR)));
         }
         f.render_widget(
             Paragraph::new(vec![

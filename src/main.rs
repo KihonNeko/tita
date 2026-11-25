@@ -58,7 +58,11 @@ fn main() -> Result<()> {
             let t = morse::Timing::new(wpm, eff.unwrap_or(wpm));
             let audio = audio::Audio::new(&cfg.backend, freq.unwrap_or(cfg.freq), cfg.volume);
             if !audio.available {
-                anyhow::bail!("pas de sortie audio : installe pipewire (pw-cat) ou alsa-utils (aplay)");
+                anyhow::bail!(if cfg!(target_os = "linux") {
+                    "pas de sortie audio : installe pipewire (pw-cat) ou alsa-utils (aplay)"
+                } else {
+                    "pas de sortie audio : aucun périphérique de sortie utilisable"
+                });
             }
             audio.play(&text.join(" "), t);
             audio.wait_idle();

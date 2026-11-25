@@ -36,7 +36,7 @@ pub struct Config {
     pub show_pattern_on_error: bool,
     /// Langue des listes de mots.
     pub lang: Lang,
-    /// "auto", "pw-cat" ou "aplay".
+    /// "auto" ; sous Linux aussi "pw-cat" ou "aplay".
     pub backend: String,
     /// Si vrai, `save` ne fait rien (tests).
     #[serde(skip)]
