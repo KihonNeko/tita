@@ -122,16 +122,19 @@ pub fn text_segments(text: &str, t: Timing) -> Vec<Seg> {
     out
 }
 
+#[allow(dead_code)]
 pub fn segments_duration(segs: &[Seg]) -> Duration {
     Duration::from_secs_f32(segs.iter().map(|s| s.secs).sum())
 }
 
 /// Durée d'un caractère seul (sans silence final).
+#[allow(dead_code)]
 pub fn char_duration(c: char, t: Timing) -> Duration {
     segments_duration(&char_segments(c, t))
 }
 
 /// Durée d'un texte (sans silence final).
+#[allow(dead_code)]
 pub fn text_duration(text: &str, t: Timing) -> Duration {
     segments_duration(&text_segments(text, t))
 }
