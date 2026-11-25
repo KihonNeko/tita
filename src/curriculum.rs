@@ -27,9 +27,15 @@ pub const LESSONS: &[Lesson] = &[
     Lesson { title: "Chiffres 1-5", chars: "12345" },
     Lesson { title: "Chiffres 6-0", chars: "67890" },
     Lesson { title: "Ponctuation", chars: ".?,/=" },
+    Lesson { title: "Ponctuation II", chars: "+-'!@" },
+    Lesson { title: "Parenthèses et deux-points", chars: "():;" },
+    Lesson { title: "Symboles rares", chars: "\"_$" },
+    Lesson { title: "Lettres accentuées", chars: "ÉÀÈÇ" },
+    Lesson { title: "Signaux spéciaux", chars: "&<>#*" },
 ];
 
-pub const KOCH_ORDER: &str = "KMURESNAPTLWI.JZ=FOY,VG5/Q92H8B?47C1D60X3";
+pub const KOCH_ORDER: &str =
+    "KMURESNAPTLWI.JZ=FOY,VG5/Q92H8B?47C1D60X3+-'!@():;\"_$ÉÀÈÇ&<>#*";
 
 impl Track {
     pub fn label(self) -> &'static str {
@@ -105,6 +111,8 @@ mod tests {
             d.sort();
             d.dedup();
             assert_eq!(d.len(), o.len());
+            // Chaque parcours couvre toute la table.
+            assert_eq!(o.len(), morse::TABLE.len());
         }
     }
 

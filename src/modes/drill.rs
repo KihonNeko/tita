@@ -221,7 +221,7 @@ impl Drill {
             }
             return Nav::Stay;
         }
-        let typed = k.to_ascii_uppercase();
+        let typed = crate::morse::up(k);
         if morse::pattern(typed).is_none() {
             return Nav::Stay;
         }
@@ -339,6 +339,10 @@ impl Screen for Drill {
                 lines.push(Line::raw(""));
                 if ctx.cfg.show_pattern_on_error {
                     lines.push(Line::raw(morse::pretty(c)));
+                    lines.push(Line::raw(""));
+                }
+                if let Some(m) = morse::meaning(c) {
+                    lines.push(Line::styled(m, dim()));
                     lines.push(Line::raw(""));
                 }
                 lines.push(Line::styled(
@@ -474,7 +478,7 @@ mod tests {
         let before = d.sound_end;
         let now = Instant::now();
         d.key_at(key(' '), &mut ctx, now);
-        d.key_at(key('#'), &mut ctx, now);
+        d.key_at(key('~'), &mut ctx, now);
         d.key_at(KeyEvent::from(KeyCode::Enter), &mut ctx, now);
         d.key_at(KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL), &mut ctx, now);
         assert_eq!(d.total, 0);

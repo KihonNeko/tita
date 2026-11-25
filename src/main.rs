@@ -47,7 +47,7 @@ fn main() -> Result<()> {
         Some(Cmd::Show { text }) => {
             for c in text.join(" ").chars() {
                 match morse::pattern(c) {
-                    Some(p) => println!("{}  {}", c.to_ascii_uppercase(), p),
+                    Some(p) => println!("{}  {}", crate::morse::up(c), p),
                     None => println!(),
                 }
             }

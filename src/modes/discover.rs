@@ -124,7 +124,7 @@ impl Discover {
                 return Nav::Stay;
             }
             KeyCode::Char(k) if !key.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) => {
-                let typed = k.to_ascii_uppercase();
+                let typed = crate::morse::up(k);
                 if morse::pattern(typed).is_none() {
                     return Nav::Stay;
                 }
@@ -195,6 +195,10 @@ impl Screen for Discover {
                     lines.push(Line::raw(""));
                     lines.push(Line::styled(morse::pretty(c), bold(ratatui::style::Color::White)));
                     lines.push(Line::raw(""));
+                    if let Some(m) = morse::meaning(c) {
+                        lines.push(Line::styled(m, dim()));
+                        lines.push(Line::raw(""));
+                    }
                     let strip: Vec<Span> = self
                         .chars
                         .iter()
@@ -227,6 +231,10 @@ impl Screen for Discover {
                         lines.push(Line::raw(""));
                         lines.push(Line::raw(morse::pretty(c)));
                         lines.push(Line::raw(""));
+                        if let Some(m) = morse::meaning(c) {
+                            lines.push(Line::styled(m, dim()));
+                            lines.push(Line::raw(""));
+                        }
                         lines.push(Line::styled(
                             format!("Tu as tapé {typed}. C'était {c} : tape-le pour continuer."),
                             dim(),
@@ -314,7 +322,7 @@ mod tests {
         assert_eq!(expected(&d), other);
 
         // Touches hors table ignorées.
-        d.on_key(key(KeyCode::Char('#')), &mut ctx);
+        d.on_key(key(KeyCode::Char('~')), &mut ctx);
         assert_eq!(expected(&d), other);
 
         assert!(matches!(d.on_key(key(KeyCode::Char(other)), &mut ctx), Nav::Stay));

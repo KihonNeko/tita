@@ -394,7 +394,7 @@ impl Screen for Qso {
                 }
             }
             KeyCode::Char(c) => {
-                let c = c.to_ascii_uppercase();
+                let c = crate::morse::up(c);
                 if morse::pattern(c).is_some() && self.input.chars().count() < MAX_INPUT {
                     self.input.push(c);
                 }

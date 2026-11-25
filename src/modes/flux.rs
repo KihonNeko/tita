@@ -142,7 +142,7 @@ impl Adapt {
 
 /// `s` en majuscules s'il est non vide et entièrement composé de `chars`.
 fn usable(s: &str, chars: &[char]) -> Option<String> {
-    let up = s.to_ascii_uppercase();
+    let up = s.to_uppercase();
     (!up.is_empty() && up.chars().all(|c| chars.contains(&c))).then_some(up)
 }
 
@@ -232,7 +232,7 @@ impl Flux {
         self.chars = ctx
             .chars()
             .into_iter()
-            .map(|c| c.to_ascii_uppercase())
+            .map(|c| crate::morse::up(c))
             .filter(|c| morse::pattern(*c).is_some())
             .collect();
         self.words = data::words(ctx.cfg.lang, &self.chars)
@@ -335,7 +335,7 @@ impl Flux {
             KeyCode::Char(k) if !k.is_whitespace() && !k.is_control() => {
                 self.expire(ctx, now);
                 if let Some((c, rt)) = self.tracker.answer(now) {
-                    self.resolve(ctx, c, Some(k.to_ascii_uppercase()), Some(rt), now);
+                    self.resolve(ctx, c, Some(crate::morse::up(k)), Some(rt), now);
                 }
             }
             _ => {}

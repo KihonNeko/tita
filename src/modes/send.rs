@@ -710,12 +710,12 @@ mod tests {
         let mut d = Decoder::new(DIT);
         let mut t = Instant::now();
         assert_eq!(d.poll(t + ms(10_000)), None);
-        for _ in 0..8 {
+        for _ in 0..9 {
             tap(&mut d, &mut t, 100, 100);
         }
         assert_eq!(
             d.poll(t + ms(400)),
-            Some(Decoded::Char { ch: None, pattern: "........".into() })
+            Some(Decoded::Char { ch: None, pattern: ".........".into() })
         );
     }
 

@@ -14,11 +14,36 @@ pub const TABLE: &[(char, &str)] = &[
     ('5', "....."), ('6', "-...."), ('7', "--..."), ('8', "---.."), ('9', "----."),
     ('.', ".-.-.-"), (',', "--..--"), ('?', "..--.."), ('/', "-..-."), ('=', "-...-"),
     ('+', ".-.-."), ('-', "-....-"), ('\'', ".----."), ('!', "-.-.--"), ('@', ".--.-."),
+    ('(', "-.--."), (')', "-.--.-"), (':', "---..."), (';', "-.-.-."),
+    ('"', ".-..-."), ('_', "..--.-"), ('$', "...-..-"),
+    ('É', "..-.."), ('À', ".--.-"), ('È', ".-..-"), ('Ç', "-.-.."),
+    // Signaux spéciaux (lettres collées), chacun associé à une touche.
+    ('&', ".-..."), ('<', "-.-.-"), ('>', "...-.-"), ('#', "........"), ('*', "...---..."),
 ];
+
+/// Majuscule, accents compris (é -> É).
+pub fn up(c: char) -> char {
+    c.to_uppercase().next().unwrap_or(c)
+}
+
+/// Signification radio des caractères qui servent aussi de signal spécial.
+pub fn meaning(c: char) -> Option<&'static str> {
+    Some(match c {
+        '+' => "AR — fin de message",
+        '=' => "BT — séparation, nouveau paragraphe",
+        '(' => "KN — à toi, et à toi seul",
+        '&' => "AS — attends",
+        '<' => "KA — début de transmission",
+        '>' => "SK — fin du contact",
+        '#' => "HH — erreur, je corrige (8 points)",
+        '*' => "SOS — détresse",
+        _ => return None,
+    })
+}
 
 /// Motif d'un caractère (insensible à la casse), `None` si inconnu.
 pub fn pattern(c: char) -> Option<&'static str> {
-    let c = c.to_ascii_uppercase();
+    let c = up(c);
     TABLE.iter().find(|(k, _)| *k == c).map(|(_, p)| *p)
 }
 
@@ -160,10 +185,23 @@ mod tests {
     }
 
     #[test]
+    fn accents_and_special_signals() {
+        assert_eq!(up('é'), 'É');
+        assert_eq!(pattern('é'), Some("..-.."));
+        assert_eq!(pattern('ç'), pattern('Ç'));
+        assert_eq!(decode("...---..."), Some('*'));
+        assert!(meaning('>').unwrap().contains("SK"));
+        assert!(meaning('E').is_none());
+        let mut s = crate::stats::Stats::default();
+        s.record('É', Some('é'), None);
+        assert_eq!(s.char('é').unwrap().correct, 1);
+    }
+
+    #[test]
     fn table_roundtrip_and_unique() {
         for (c, p) in TABLE {
             assert_eq!(decode(p), Some(*c));
-            assert_eq!(pattern(c.to_ascii_lowercase()), Some(*p));
+            assert_eq!(pattern(c.to_lowercase().next().unwrap()), Some(*p));
         }
     }
 }

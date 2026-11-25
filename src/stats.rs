@@ -106,8 +106,8 @@ impl Stats {
     /// Enregistre une réponse. `typed = None` : caractère raté (pas de réponse).
     /// `rt` : temps de réaction, si mesuré.
     pub fn record(&mut self, sent: char, typed: Option<char>, rt: Option<Duration>) {
-        let sent = sent.to_ascii_uppercase();
-        let typed = typed.map(|c| c.to_ascii_uppercase());
+        let sent = crate::morse::up(sent);
+        let typed = typed.map(|c| crate::morse::up(c));
         let ok = typed == Some(sent);
         let s = self.chars.entry(sent).or_default();
         s.seen += 1;
@@ -127,7 +127,7 @@ impl Stats {
     }
 
     pub fn char(&self, c: char) -> Option<&CharStat> {
-        self.chars.get(&c.to_ascii_uppercase())
+        self.chars.get(&crate::morse::up(c))
     }
 
     /// Précision récente moyenne sur un ensemble de caractères ; un caractère

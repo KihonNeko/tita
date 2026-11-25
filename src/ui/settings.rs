@@ -465,7 +465,7 @@ mod tests {
         for item in ITEMS {
             assert!(out.contains(item.label()), "{} absent :\n{out}", item.label());
         }
-        assert!(out.contains("20 mots/min") && out.contains("650 Hz") && out.contains("2 / 41"), "{out}");
+        assert!(out.contains("20 mots/min") && out.contains("650 Hz") && out.contains("2 / 62"), "{out}");
         for i in 0..ITEMS.len() {
             s.sel = i;
             for (w, h) in [(80, 24), (20, 6), (1, 1), (200, 60)] {

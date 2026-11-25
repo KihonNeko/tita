@@ -393,7 +393,7 @@ impl Screen for Words {
             KeyCode::Enter if !self.typed.is_empty() || !self.playing() => self.validate(ctx),
             KeyCode::Char(' ') if !self.typed.is_empty() => self.validate(ctx),
             KeyCode::Char(c) => {
-                let c = c.to_ascii_uppercase();
+                let c = crate::morse::up(c);
                 if morse::pattern(c).is_some() && self.typed.chars().count() < MAX_INPUT {
                     self.typed.push(c);
                 }

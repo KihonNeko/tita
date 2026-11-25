@@ -33,7 +33,7 @@ struct Graded {
 fn grade(sent: &[String], typed: &str) -> Vec<Graded> {
     let typed: Vec<Vec<char>> = typed
         .split_whitespace()
-        .map(|g| g.chars().map(|c| c.to_ascii_uppercase()).collect())
+        .map(|g| g.chars().map(|c| crate::morse::up(c)).collect())
         .collect();
     sent.iter()
         .enumerate()
@@ -183,7 +183,7 @@ impl Koch {
                     self.input.push(' ');
                 }
             }
-            KeyCode::Char(c) if !c.is_control() => self.input.push(c.to_ascii_uppercase()),
+            KeyCode::Char(c) if !c.is_control() => self.input.push(crate::morse::up(c)),
             _ => return false,
         }
         true

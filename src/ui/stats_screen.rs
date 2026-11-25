@@ -329,20 +329,20 @@ mod tests {
         assert!(!out.contains("Pas encore"));
         assert!(out.contains("Série") && out.contains("1 jour"), "{out}");
         assert!(out.contains("1 h 05 min"), "{out}");
-        assert!(out.contains("10 / 41"), "{out}");
+        assert!(out.contains("10 / 62"), "{out}");
         assert!(out.contains("S pris pour H"), "{out}");
         assert!(out.contains("×16"), "{out}");
         assert!(matches!(s.on_key(k(KeyCode::Esc), &mut ctx), Nav::Back));
     }
 
     #[test]
-    fn char_table_shows_all_41_in_80x24() {
+    fn char_table_shows_every_char_in_80x32() {
         let mut ctx = filled();
         let mut s = StatsScreen::new();
         s.on_key(k(KeyCode::Tab), &mut ctx);
         for track in [Track::Lessons, Track::Koch] {
             ctx.cfg.track = track;
-            let out = render_to_string(&mut s, &ctx, 80, 24);
+            let out = render_to_string(&mut s, &ctx, 80, 32);
             // Chaque caractère du parcours ouvre une cellule (suivi d'une barre ou de points).
             for c in track.order() {
                 let found = out.lines().any(|l| {
@@ -377,8 +377,8 @@ mod tests {
         }
         let out = render_to_string(&mut s, &ctx, 30, 12);
         // Dernier caractère du parcours visible, défilement borné.
-        assert!(out.lines().any(|l| l.trim_start().starts_with("= ")), "{out}");
-        assert!(s.scroll < 41);
+        assert!(out.lines().any(|l| l.trim_start().starts_with("* ")), "{out}");
+        assert!(s.scroll < 62);
         assert_eq!(columns(78), 3);
         assert_eq!(columns(10), 1);
         assert_eq!(columns(500), MAX_COLS);
