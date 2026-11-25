@@ -51,26 +51,14 @@ jobs:
           New-Item -ItemType Directory dist | Out-Null
           Copy-Item target/${{ matrix.target }}/release/tita.exe, README.md dist/
           Compress-Archive -Path dist/* -DestinationPath tita-${{ github.ref_name }}-${{ matrix.name }}.zip
-      - uses: actions/upload-artifact@v4
-        with:
-          name: tita-${{ matrix.name }}
-          path: |
-            tita-*.tar.gz
-            tita-*.zip
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-      - name: create release
+      - name: publish to the release
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release create "${{ github.ref_name }}" artifacts/*
-          --repo "${{ github.repository }}"
-          --title "tita ${{ github.ref_name }}"
-          --generate-notes
+        run: |
+          # each system publishes its own archive as soon as it is built;
+          # whichever job gets there first creates the release
+          gh release create "${{ github.ref_name }}" --repo "${{ github.repository }}" \
+            --title "tita ${{ github.ref_name }}" --generate-notes || true
+          gh release upload "${{ github.ref_name }}" tita-${{ github.ref_name }}-* \
+            --repo "${{ github.repository }}" --clobber
