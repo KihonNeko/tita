@@ -13,7 +13,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use rand::Rng;
 use ratatui::style::Color;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::Paragraph;
+use ratatui::layout::Alignment;
 use ratatui::Frame;
 use std::collections::{BTreeMap, VecDeque};
 use std::time::{Duration, Instant};
@@ -175,6 +175,17 @@ impl Words {
             streak: 0,
             best_len: headcopy::START_LEN,
         }
+    }
+
+    /// Caractères du clavier tactile : les débloqués, plus tout ce que le
+    /// contenu peut demander quand le mode est forcé.
+    fn keys(&self, ctx: &Ctx) -> Vec<char> {
+        let mut chars = ctx.chars();
+        if self.force {
+            chars.extend(('A'..='Z').chain('0'..='9').chain(['/']));
+            chars.extend(self.pool.iter().flat_map(|i| i.text.chars()));
+        }
+        chars
     }
 
     fn build_pool(&mut self, ctx: &Ctx) {
@@ -431,7 +442,10 @@ impl Screen for Words {
             ],
             Phase::Feedback { .. } => vec![(enter, t("suivant", "next")), (esc, end)],
         };
-        let area = ui::frame(f, self.kind.mode(), &hints);
+        let mut area = ui::frame(f, self.kind.mode(), &hints);
+        if matches!(self.phase, Phase::Input) {
+            area = ui::keyboard(f, area, ui::Keys { chars: &self.keys(ctx), backspace: true, space: false });
+        }
 
         let left = (ctx.cfg.session_secs as u64).saturating_sub(self.elapsed().as_secs());
         let mut status = crate::tr!(
@@ -503,8 +517,7 @@ impl Screen for Words {
                 dim(),
             ));
         }
-        let h = lines.len() as u16;
-        f.render_widget(Paragraph::new(lines), ui::centered(area, 80, h));
+        ui::text(f, lines, area, 80, Alignment::Left);
     }
 }
 

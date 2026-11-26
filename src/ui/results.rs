@@ -7,8 +7,8 @@ use crate::i18n::t;
 use crate::tr;
 use crate::ui::{self, acc_color, bold, dim};
 use crossterm::event::{KeyCode, KeyEvent};
+use ratatui::layout::Alignment;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 
 pub struct Results {
@@ -42,11 +42,11 @@ impl Screen for Results {
         } else {
             t("découvrir les nouveautés", "discover the new characters")
         };
-        let area = ui::frame(
-            f,
-            &tr!("Bilan — {}", "Summary — {}", self.s.mode),
-            &[(t("Entrée", "Enter"), hint)],
-        );
+        let mut hints = vec![(t("Entrée", "Enter"), hint)];
+        if !self.new_chars.is_empty() {
+            hints.push((t("Échap", "Esc"), t("retour", "back")));
+        }
+        let area = ui::frame(f, &tr!("Bilan — {}", "Summary — {}", self.s.mode), &hints);
         let s = &self.s;
         let acc = s.correct as f32 / s.total.max(1) as f32;
         let mut lines = vec![
@@ -103,7 +103,6 @@ impl Screen for Results {
             ),
             dim(),
         ));
-        let h = lines.len() as u16;
-        f.render_widget(Paragraph::new(lines), ui::centered(area, 64, h));
+        ui::text(f, lines, area, 64, Alignment::Left);
     }
 }

@@ -12,7 +12,7 @@ use rand::Rng;
 use ratatui::layout::{Alignment, Constraint, Layout};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::Paragraph;
+use ratatui::widgets::{Paragraph, Wrap};
 use ratatui::Frame;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
@@ -302,27 +302,42 @@ impl Screen for Drill {
             self.name(),
             &[(t("Espace", "Space"), t("rejouer", "replay")), (t("Échap", "Esc"), t("terminer", "finish"))],
         );
+        let mobile = ui::mobile();
+        if mobile && matches!(self.phase, Phase::Ready) {
+            // Toucher n'importe où lance la session.
+            ui::touch::key(area, KeyCode::Enter);
+        }
+        let area = ui::keyboard(f, area, ui::Keys { chars: &ctx.chars(), backspace: false, space: false });
         let [top, mid, bottom] = Layout::vertical([
-            Constraint::Length(2),
+            Constraint::Length(if mobile { 3 } else { 2 }),
             Constraint::Min(1),
             Constraint::Length(1),
         ])
         .areas(area);
 
         if !matches!(self.phase, Phase::Ready) {
-            f.render_widget(Paragraph::new(self.status_line(ctx, now)), top);
+            let status = Paragraph::new(self.status_line(ctx, now));
+            // Sur écran étroit la ligne d'état se replie.
+            f.render_widget(if mobile { status.wrap(Wrap { trim: true }) } else { status }, top);
         }
 
         let mut lines: Vec<Line> = Vec::new();
         match self.phase {
             Phase::Ready => {
-                lines.push(Line::styled(t("Prêt ? Appuie sur une touche.", "Ready? Press any key."), bold(ui::ACCENT)));
+                let ready = if mobile {
+                    t("Prêt ? Touche l'écran.", "Ready? Tap the screen.")
+                } else {
+                    t("Prêt ? Appuie sur une touche.", "Ready? Press any key.")
+                };
+                lines.push(Line::styled(ready, bold(ui::ACCENT)));
                 lines.push(Line::raw(""));
                 lines.push(Line::styled(
                     t("Un caractère joue, tu tapes sa touche.", "A character plays, you type its key."),
                     dim(),
                 ));
-                let rule = if self.endless {
+                let rule = if self.endless && mobile {
+                    t("Pas de limite de durée : ‹ pour terminer.", "No time limit: ‹ to finish.").to_string()
+                } else if self.endless {
                     t("Pas de limite de durée : Échap pour terminer.", "No time limit: Esc to finish.").to_string()
                 } else {
                     crate::tr!("Session de {}.", "{} session.", ui::mmss(ctx.cfg.session_secs as u64))
@@ -330,7 +345,7 @@ impl Screen for Drill {
                 lines.push(Line::styled(rule, dim()));
             }
             Phase::Listen => {
-                lines.push(Line::styled("?", bold(ui::ACCENT)));
+                ui::hero(&mut lines, "?".into(), bold(ui::ACCENT));
                 lines.push(Line::raw(""));
                 match self.flash {
                     Some((c, t)) if self.endless && now.saturating_duration_since(t) < FLASH => {
@@ -341,13 +356,13 @@ impl Screen for Drill {
             }
             Phase::Pause { .. } => {
                 let c = self.current.unwrap_or(' ');
-                lines.push(Line::styled(c.to_string(), bold(ui::OK)));
+                ui::hero(&mut lines, c.to_string(), bold(ui::OK));
                 lines.push(Line::raw(""));
                 lines.push(Line::styled("✓", bold(ui::OK)));
             }
             Phase::Fix { typed } => {
                 let c = self.current.unwrap_or(' ');
-                lines.push(Line::styled(c.to_string(), bold(ui::ERR)));
+                ui::hero(&mut lines, c.to_string(), bold(ui::ERR));
                 lines.push(Line::raw(""));
                 if ctx.cfg.show_pattern_on_error {
                     lines.push(Line::raw(morse::pretty(c)));
@@ -366,15 +381,14 @@ impl Screen for Drill {
                 ));
             }
         }
-        let h = lines.len() as u16;
-        f.render_widget(
-            Paragraph::new(lines).alignment(Alignment::Center),
-            ui::centered(mid, mid.width, h),
-        );
+        ui::text(f, lines, mid, mid.width, Alignment::Center);
 
+        // Les plus récents à droite : ne garder que ce qui tient sur la ligne.
+        let fit = (bottom.width as usize / 2).max(1);
         let hist: Vec<Span> = self
             .history
             .iter()
+            .skip(self.history.len().saturating_sub(fit))
             .map(|(c, ok)| Span::styled(format!("{c} "), Style::default().fg(if *ok { ui::OK } else { ui::ERR })))
             .collect();
         f.render_widget(Paragraph::new(Line::from(hist)).alignment(Alignment::Center), bottom);

@@ -9,7 +9,6 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use rand::seq::SliceRandom;
 use ratatui::layout::Alignment;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 use std::time::{Duration, Instant};
 
@@ -196,7 +195,7 @@ impl Screen for Discover {
                     let c = self.chars[self.idx];
                     lines.push(Line::styled(format!("{} / {}", self.idx + 1, n), dim()));
                     lines.push(Line::raw(""));
-                    lines.push(Line::styled(c.to_string(), bold(ui::ACCENT)));
+                    ui::hero(&mut lines, c.to_string(), bold(ui::ACCENT));
                     lines.push(Line::raw(""));
                     lines.push(Line::styled(morse::pretty(c), bold(ratatui::style::Color::White)));
                     lines.push(Line::raw(""));
@@ -222,6 +221,8 @@ impl Screen for Discover {
                             "Dernier caractère. Ensuite : petite vérification à l'oreille.",
                             "Last character. Next: a short check by ear.",
                         )
+                    } else if ui::mobile() {
+                        t("Dernier caractère. → pour terminer.", "Last character. → to finish.")
                     } else {
                         t("Dernier caractère. Entrée pour terminer.", "Last character. Enter to finish.")
                     };
@@ -242,7 +243,7 @@ impl Screen for Discover {
                 match wrong {
                     Some(typed) => {
                         let c = queue[0];
-                        lines.push(Line::styled(c.to_string(), bold(ui::ERR)));
+                        ui::hero(&mut lines, c.to_string(), bold(ui::ERR));
                         lines.push(Line::raw(""));
                         lines.push(Line::raw(morse::pretty(c)));
                         lines.push(Line::raw(""));
@@ -259,7 +260,7 @@ impl Screen for Discover {
                         ));
                     }
                     None => {
-                        lines.push(Line::styled("?", bold(ui::ACCENT)));
+                        ui::hero(&mut lines, "?".into(), bold(ui::ACCENT));
                         lines.push(Line::raw(""));
                         match self.flash {
                             Some((c, t)) if t.elapsed() < FLASH => {
@@ -276,12 +277,11 @@ impl Screen for Discover {
                 }
             }
         }
-        let area = ui::frame(f, t("Découverte", "Discovery"), &hints);
-        let h = lines.len() as u16;
-        f.render_widget(
-            Paragraph::new(lines).alignment(Alignment::Center),
-            ui::centered(area, area.width, h),
-        );
+        let mut area = ui::frame(f, t("Découverte", "Discovery"), &hints);
+        if matches!(self.phase, Phase::Check { .. }) {
+            area = ui::keyboard(f, area, ui::Keys { chars: &self.chars, backspace: false, space: false });
+        }
+        ui::text(f, lines, area, area.width, Alignment::Center);
     }
 }
 

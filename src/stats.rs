@@ -68,7 +68,7 @@ pub struct Stats {
 }
 
 fn path() -> Option<PathBuf> {
-    config::dirs().map(|d| d.data_dir().join("stats.json"))
+    config::data_file("stats.json")
 }
 
 fn track_key(t: Track) -> &'static str {

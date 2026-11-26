@@ -7,6 +7,7 @@ use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -65,8 +66,27 @@ impl Default for Config {
     }
 }
 
+/// Réglages imposés par la plateforme quand elle n'a ni variables de langue
+/// ni dossiers utilisateur classiques (Android).
+static PLATFORM_LANG: OnceLock<Lang> = OnceLock::new();
+static PLATFORM_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+/// Indique la langue du système. À appeler avant `Config::load`.
+pub fn set_system_lang(lang: Lang) {
+    let _ = PLATFORM_LANG.set(lang);
+}
+
+/// Range réglages et statistiques dans `dir` plutôt que dans les dossiers
+/// utilisateur. À appeler avant tout chargement.
+pub fn set_data_dir(dir: PathBuf) {
+    let _ = PLATFORM_DIR.set(dir);
+}
+
 /// Français si la langue du système est le français, anglais sinon.
 fn system_lang() -> Lang {
+    if let Some(lang) = PLATFORM_LANG.get() {
+        return *lang;
+    }
     let var = ["LC_ALL", "LC_MESSAGES", "LANG"]
         .iter()
         .find_map(|k| std::env::var(k).ok().filter(|v| !v.is_empty()));
@@ -76,12 +96,24 @@ fn system_lang() -> Lang {
     }
 }
 
-pub fn dirs() -> Option<ProjectDirs> {
+fn dirs() -> Option<ProjectDirs> {
     ProjectDirs::from("", "", "tita")
 }
 
+/// Fichier des réglages.
 fn path() -> Option<PathBuf> {
-    dirs().map(|d| d.config_dir().join("config.toml"))
+    match PLATFORM_DIR.get() {
+        Some(dir) => Some(dir.join("config.toml")),
+        None => dirs().map(|d| d.config_dir().join("config.toml")),
+    }
+}
+
+/// Fichier `name` dans le dossier des données (statistiques).
+pub fn data_file(name: &str) -> Option<PathBuf> {
+    match PLATFORM_DIR.get() {
+        Some(dir) => Some(dir.join(name)),
+        None => dirs().map(|d| d.data_dir().join(name)),
+    }
 }
 
 impl Config {

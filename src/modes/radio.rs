@@ -10,6 +10,7 @@ use crate::modes::words::{align, diff_spans, Kind, Tally, Words};
 use crate::ui::{self, bold, dim};
 use crate::{data, morse};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::layout::{Alignment, Rect};
 use ratatui::style::Color;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Paragraph, Wrap};
@@ -156,6 +157,14 @@ impl Screen for Radio {
         Nav::Stay
     }
 
+    fn on_item(&mut self, index: usize, ctx: &mut Ctx) -> Nav {
+        if index >= TOPICS.len() || self.gate.is_some() {
+            return Nav::Stay;
+        }
+        self.sel = index;
+        self.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), ctx)
+    }
+
     fn draw(&mut self, f: &mut Frame, ctx: &Ctx) {
         let topic = TOPICS[self.sel];
         if let Some(miss) = &self.gate {
@@ -172,7 +181,7 @@ impl Screen for Radio {
             if miss.len() > 18 {
                 list.push('…');
             }
-            let lines = vec![
+            let mut lines = vec![
                 Line::styled(
                     t(
                         "Pas encore assez de caractères débloqués pour ce contenu.",
@@ -192,27 +201,53 @@ impl Screen for Radio {
                     ),
                     dim(),
                 ),
-                Line::raw(""),
-                Line::from(vec![
+            ];
+            if !ui::mobile() {
+                // Sur mobile, les deux boutons disent déjà la même chose.
+                lines.push(Line::raw(""));
+                lines.push(Line::from(vec![
                     Span::styled(t("Entrée", "Enter"), bold(ui::ACCENT)),
                     Span::raw(t(
                         " : essayer quand même avec tous les caractères",
                         ": try anyway with all characters",
                     )),
-                ]),
-                Line::from(vec![
+                ]));
+                lines.push(Line::from(vec![
                     Span::styled(t("Échap", "Esc"), bold(ui::ACCENT)),
                     Span::raw(t(" : retour", ": back")),
-                ]),
-            ];
-            let h = lines.len() as u16 + 2;
-            f.render_widget(
-                Paragraph::new(lines).wrap(Wrap { trim: false }),
-                ui::centered(area, 64, h),
-            );
+                ]));
+            }
+            ui::text(f, lines, area, 64, Alignment::Left);
             return;
         }
 
+        let allowed = ctx.chars();
+        if ui::mobile() {
+            // Liste tactile : une large ligne par sujet.
+            let area = ui::frame(f, "Radio", &[(t("Échap", "Esc"), t("retour", "back"))]);
+            let head = Paragraph::new(Line::styled(t("Que veux-tu copier ?", "What do you want to copy?"), dim()));
+            f.render_widget(head, Rect { height: area.height.min(1), ..area });
+            let full = f.area();
+            for (i, item) in TOPICS.iter().enumerate() {
+                let y = area.y + 2 + i as u16 * 4;
+                if y + 4 > area.y + area.height {
+                    break;
+                }
+                let row = Rect { x: area.x, y, width: area.width, height: 4 };
+                ui::touch::item(Rect { x: full.x, width: full.width, ..row }, i);
+                let pad = (area.width as usize).saturating_sub(item.label().chars().count() + 1);
+                let mut lines = vec![Line::from(vec![
+                    Span::styled(item.label(), bold(Color::White)),
+                    Span::styled(format!("{:>pad$}", "›"), dim()),
+                ])];
+                if !ready(*item, &allowed) {
+                    lines.push(Line::styled(t("(caractères à débloquer)", "(characters to unlock)"), bold(ui::WARN)));
+                }
+                lines.push(Line::styled(item.desc(), dim()));
+                f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), row);
+            }
+            return;
+        }
         let area = ui::frame(
             f,
             "Radio",
@@ -222,7 +257,6 @@ impl Screen for Radio {
                 (t("Échap", "Esc"), t("retour", "back")),
             ],
         );
-        let allowed = ctx.chars();
         let mut lines = vec![Line::styled(t("Que veux-tu copier ?", "What do you want to copy?"), dim()), Line::raw("")];
         for (i, item) in TOPICS.iter().enumerate() {
             let mut spans = vec![if i == self.sel {
@@ -237,8 +271,7 @@ impl Screen for Radio {
         }
         lines.push(Line::raw(""));
         lines.push(Line::styled(topic.desc(), dim()));
-        let h = lines.len() as u16;
-        f.render_widget(Paragraph::new(lines), ui::centered(area, 64, h));
+        ui::text(f, lines, area, 64, Alignment::Left);
     }
 }
 
@@ -452,7 +485,8 @@ impl Screen for Qso {
         Nav::Stay
     }
 
-    fn draw(&mut self, f: &mut Frame, _ctx: &Ctx) {
+    fn draw(&mut self, f: &mut Frame, ctx: &Ctx) {
+        let mobile = ui::mobile();
         let (enter, replay) = if self.review {
             (t("suite", "continue"), t("réécouter", "replay"))
         } else {
@@ -460,7 +494,15 @@ impl Screen for Qso {
         };
         let hints =
             [(t("Entrée", "Enter"), enter), ("Tab", replay), (t("Échap", "Esc"), t("terminer", "finish"))];
-        let area = ui::frame(f, qso_title(), &hints);
+        let mut area = ui::frame(f, qso_title(), &hints);
+        if !self.review {
+            // Les débloqués, plus tout ce que l'échange contient s'il est forcé.
+            let mut chars = ctx.chars();
+            if self.force {
+                chars.extend(self.txs.iter().flat_map(|t| t.chars()).filter(|c| *c != ' '));
+            }
+            area = ui::keyboard(f, area, ui::Keys { chars: &chars, backspace: true, space: true });
+        }
         let mut status = crate::tr!(
             "Transmission {} sur {}",
             "Transmission {} of {}",
@@ -481,7 +523,9 @@ impl Screen for Qso {
             lines.extend(review_lines(sent, &self.input, area.width as usize));
             let last = self.idx + 1 >= self.txs.len();
             lines.push(Line::styled(
-                if last {
+                if mobile {
+                    ""
+                } else if last {
                     t("Entrée : terminer l'échange.", "Enter: finish the contact.")
                 } else {
                     t("Entrée : transmission suivante.", "Enter: next transmission.")
@@ -499,10 +543,14 @@ impl Screen for Qso {
                 )
             } else {
                 Line::styled(
-                    t(
-                        "Transmission terminée. Entrée pour voir la correction.",
-                        "Transmission over. Press Enter to see the correction.",
-                    ),
+                    if mobile {
+                        t("Transmission terminée. Touche « corriger ».", "Transmission over. Tap \"check\".")
+                    } else {
+                        t(
+                            "Transmission terminée. Entrée pour voir la correction.",
+                            "Transmission over. Press Enter to see the correction.",
+                        )
+                    },
                     bold(ui::ACCENT),
                 )
             });

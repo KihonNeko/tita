@@ -14,6 +14,7 @@ use crossterm::event::{
     KeyCode, KeyEvent, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags,
     PushKeyboardEnhancementFlags,
 };
+use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Paragraph, Wrap};
@@ -470,9 +471,10 @@ impl Screen for SendMode {
             );
         }
         if self.releases.is_none() {
-            self.releases = Some(probe_releases());
+            // Au doigt, appui et relâchement sont toujours connus.
+            self.releases = Some(ui::mobile() || probe_releases());
         }
-        if self.straight() && !self.pushed && !cfg!(test) {
+        if self.straight() && !self.pushed && !cfg!(test) && !ui::mobile() {
             let flags = KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
                 | KeyboardEnhancementFlags::REPORT_EVENT_TYPES;
             if crossterm::execute!(io::stdout(), PushKeyboardEnhancementFlags(flags)).is_ok() {
@@ -521,7 +523,11 @@ impl Screen for SendMode {
         } else {
             t("Émission — exercice", "Sending — exercise")
         };
-        let area = ui::frame(f, title, &hints);
+        let mut area = ui::frame(f, title, &hints);
+        let mobile = ui::mobile();
+        if mobile {
+            area = pads(f, area);
+        }
 
         let mut lines: Vec<Line> = Vec::new();
         if self.free {
@@ -624,7 +630,19 @@ impl Screen for SendMode {
         lines.push(Line::raw(""));
 
         let nominal = ctx.timing();
-        if self.straight() {
+        if mobile {
+            let unit = self.dec.unit().as_secs_f32();
+            lines.push(Line::styled(
+                crate::tr!(
+                    "Grande touche : appui court = point, appui long = trait. Ton point ≈ {:.0} ms ({:.0} mots/min, réglé à {:.0}).",
+                    "Big key: short press = dot, long press = dash. Your dot ≈ {:.0} ms ({:.0} wpm, set to {:.0}).",
+                    unit * 1000.0,
+                    1.2 / unit,
+                    nominal.char_wpm
+                ),
+                dim(),
+            ));
+        } else if self.straight() {
             let unit = self.dec.unit().as_secs_f32();
             lines.push(Line::styled(
                 crate::tr!(
@@ -668,6 +686,28 @@ impl Screen for SendMode {
         ));
         f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
     }
+}
+
+/// Sur mobile : les manipulateurs tactiles, en bas de `area`. Deux petites
+/// touches (point, trait) et, sous le pouce, le manipulateur droit. Renvoie
+/// la place qui reste au-dessus.
+fn pads(f: &mut Frame, area: Rect) -> Rect {
+    const SMALL: u16 = 4;
+    let big = (area.height / 4).clamp(4, 8);
+    let h = SMALL + 1 + big;
+    if area.height < h + 4 {
+        return area;
+    }
+    let full = f.area();
+    let top = area.y + area.height - h;
+    let half = full.width.saturating_sub(3) / 2;
+    let dot = Rect { x: full.x + 1, y: top, width: half, height: SMALL };
+    let dash = Rect { x: full.x + 2 + half, ..dot };
+    let key = Rect { x: full.x + 1, y: top + SMALL + 1, width: full.width.saturating_sub(2), height: big };
+    ui::button(f, dot, t("·  point", "·  dot"), KeyCode::Char('.'), ui::Face::Solid);
+    ui::button(f, dash, t("−  trait", "−  dash"), KeyCode::Char('-'), ui::Face::Solid);
+    ui::button(f, key, t("MANIPULATEUR", "STRAIGHT KEY"), KeyCode::Char(' '), ui::Face::Accent);
+    Rect { height: area.height - h - 1, ..area }
 }
 
 impl SendMode {

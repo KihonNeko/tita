@@ -50,6 +50,22 @@ const ITEMS: &[(&str, &str, &str, &str)] = &[
     ("Quitter", "Quit", "", ""),
 ];
 
+/// Descriptions courtes pour l'écran étroit du mobile (fr, en), dans l'ordre
+/// de `ITEMS`.
+const SHORT: &[(&str, &str)] = &[
+    ("Une lettre joue, tu tapes la touche.", "A letter plays, you press its key."),
+    ("Sans limite de durée : réflexes.", "No time limit: trains reflexes."),
+    ("Réécouter les caractères débloqués.", "Hear the unlocked characters again."),
+    ("Groupes de 5 à pleine vitesse.", "Groups of 5 at full speed."),
+    ("Flux continu, vitesse adaptative.", "Continuous stream, adaptive speed."),
+    ("Mots faits des lettres apprises.", "Words made of letters you know."),
+    ("Le mot joue, tu tapes à la fin.", "The word plays, then you type it."),
+    ("Indicatifs, codes Q, échanges.", "Callsigns, Q codes, contacts."),
+    ("Manipule, l'appli décode ton rythme.", "Key it, the app decodes your rhythm."),
+    ("Précision, réaction, confusions.", "Accuracy, reaction time, confusions."),
+    ("Vitesses, son, parcours, langue.", "Speeds, sound, track, language."),
+];
+
 pub struct Menu {
     sel: usize,
 }
@@ -76,6 +92,66 @@ impl Menu {
         };
         Nav::Push(s)
     }
+
+    /// Menu tactile : chaque mode est une large ligne à toucher. Pas de
+    /// « Quitter » : sur mobile on sort avec le geste de retour.
+    fn draw_mobile(&mut self, f: &mut Frame, ctx: &Ctx) {
+        let area = ui::frame(f, t("Le Morse à l'oreille", "Morse code by ear"), &[]);
+        let track = ctx.cfg.track;
+        let unlocked = ctx.stats.unlocked(track);
+        let total = track.order().len();
+        let place = match track {
+            Track::Lessons => {
+                let i = curriculum::lesson_index(unlocked);
+                tr!("Leçon {} — {}", "Lesson {} — {}", i + 1, curriculum::LESSONS[i].title())
+            }
+            Track::Koch => tr!("Koch — {unlocked} caractères", "Koch — {unlocked} characters"),
+        };
+        let mut status = vec![
+            Line::styled(place, bold(ui::ACCENT)),
+            Line::styled(format!("{} {unlocked}/{total}", ui::bar(unlocked as f32 / total as f32, 20)), dim()),
+            Line::styled(
+                tr!(
+                    "{:.0}/{:.0} mots/min · série {} j · {} auj.",
+                    "{:.0}/{:.0} wpm · {}-day streak · {} today",
+                    ctx.cfg.char_wpm,
+                    ctx.cfg.eff_wpm,
+                    ctx.stats.streak(),
+                    ui::mmss(ctx.stats.secs_today() as u64)
+                ),
+                dim(),
+            ),
+        ];
+        if !ctx.audio.available {
+            status.push(Line::styled(t("⚠ pas de sortie audio", "⚠ no audio output"), bold(ui::ERR)));
+        }
+        let status = Paragraph::new(status).wrap(ratatui::widgets::Wrap { trim: true });
+        let status_h = (status.line_count(area.width) as u16).min(area.height);
+        f.render_widget(status, ratatui::layout::Rect { height: status_h, ..area });
+
+        let n = SHORT.len() as u16;
+        let room = area.height.saturating_sub(status_h + 1);
+        let item_h = (room / n).clamp(1, 3);
+        let full = f.area();
+        for (i, (fr, en)) in SHORT.iter().enumerate() {
+            let y = area.y + status_h + 1 + i as u16 * item_h;
+            if y + item_h > area.y + area.height {
+                break;
+            }
+            let row = ratatui::layout::Rect { x: area.x, y, width: area.width, height: item_h };
+            ui::touch::item(ratatui::layout::Rect { x: full.x, width: full.width, ..row }, i);
+            let name = t(ITEMS[i].0, ITEMS[i].1);
+            let pad = (area.width as usize).saturating_sub(name.chars().count() + 1);
+            let mut lines = vec![Line::from(vec![
+                Span::styled(name, bold(ratatui::style::Color::White)),
+                Span::styled(format!("{:>pad$}", "›"), dim()),
+            ])];
+            if item_h > 1 {
+                lines.push(Line::styled(t(fr, en), dim()));
+            }
+            f.render_widget(Paragraph::new(lines), row);
+        }
+    }
 }
 
 impl Screen for Menu {
@@ -97,7 +173,18 @@ impl Screen for Menu {
         Nav::Stay
     }
 
+    fn on_item(&mut self, index: usize, ctx: &mut Ctx) -> Nav {
+        if index >= SHORT.len() {
+            return Nav::Stay;
+        }
+        self.sel = index;
+        self.open(ctx)
+    }
+
     fn draw(&mut self, f: &mut Frame, ctx: &Ctx) {
+        if ui::mobile() {
+            return self.draw_mobile(f, ctx);
+        }
         let area = ui::frame(
             f,
             t("Apprendre le Morse à l'oreille", "Learn Morse code by ear"),

@@ -6,6 +6,7 @@ use crate::curriculum::Track;
 use crate::i18n::t;
 use crate::ui::{self, bold, dim};
 use crossterm::event::{KeyCode, KeyEvent};
+use ratatui::layout::Rect;
 use ratatui::style::Color;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Paragraph, Wrap};
@@ -277,6 +278,13 @@ impl Screen for Settings {
         Nav::Stay
     }
 
+    fn on_item(&mut self, index: usize, _ctx: &mut Ctx) -> Nav {
+        if index < ITEMS.len() {
+            self.sel = index;
+        }
+        Nav::Stay
+    }
+
     fn draw(&mut self, f: &mut Frame, ctx: &Ctx) {
         let area = ui::frame(
             f,
@@ -289,10 +297,32 @@ impl Screen for Settings {
             ],
         );
         let current = self.item();
+        let mobile = ui::mobile();
         let mut lines: Vec<Line> = Vec::new();
-        for item in ITEMS {
+        for (i, item) in ITEMS.iter().enumerate() {
             let selected = *item == current;
             let value = Self::value(*item, ctx);
+            if mobile {
+                // Deux rangées par réglage (nom, valeur) : une cible assez
+                // haute pour le doigt, qui tient sur un écran étroit.
+                let y = area.y + 2 * i as u16;
+                if y + 2 <= area.y + area.height {
+                    let full = f.area();
+                    ui::touch::item(Rect { x: full.x, y, width: full.width, height: 2 }, i);
+                }
+                if selected {
+                    lines.push(Line::styled(format!(" ▶ {}", item.label()), bold(ui::ACCENT)));
+                    lines.push(Line::from(vec![
+                        Span::styled("     ◀ ", dim()),
+                        Span::styled(value, bold(Color::White)),
+                        Span::styled(" ▶", dim()),
+                    ]));
+                } else {
+                    lines.push(Line::raw(format!("   {}", item.label())));
+                    lines.push(Line::styled(format!("       {value}"), dim()));
+                }
+                continue;
+            }
             let label = format!("{:<26}", item.label());
             if selected {
                 lines.push(Line::from(vec![
@@ -317,7 +347,12 @@ impl Screen for Settings {
         let unlocked = ctx.stats.unlocked(track);
         let order = track.order();
         let per_line = ((area.width as usize).saturating_sub(5) / 2).max(1);
-        for (row, chunk) in order.chunks(per_line).enumerate() {
+        // Sur mobile la place est comptée : la liste n'apparaît que sur son réglage.
+        let show_list = !mobile || current == Item::Unlocked;
+        if mobile {
+            lines.push(Line::raw(""));
+        }
+        for (row, chunk) in order.chunks(per_line).enumerate().filter(|_| show_list) {
             let mut spans = vec![Span::raw("     ")];
             for (j, c) in chunk.iter().enumerate() {
                 let i = row * per_line + j;
@@ -331,7 +366,9 @@ impl Screen for Settings {
             }
             lines.push(Line::from(spans));
         }
-        lines.push(Line::raw(""));
+        if !mobile || show_list {
+            lines.push(Line::raw(""));
+        }
         lines.push(Line::styled(current.help(), dim()));
         if !ctx.audio.available {
             lines.push(Line::styled(

@@ -12,7 +12,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use rand::Rng;
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Paragraph, Wrap};
+use ratatui::layout::Alignment;
 use ratatui::Frame;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
@@ -402,13 +402,13 @@ impl Flux {
                 )),
             ]),
         ];
-        let h = lines.len() as u16 + 4;
-        f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), ui::centered(area, 64, h));
+        ui::text(f, lines, area, 64, Alignment::Left);
     }
 
-    fn draw_running(&self, f: &mut Frame) {
+    fn draw_running(&self, f: &mut Frame, ctx: &Ctx) {
         let now = Instant::now();
         let area = ui::frame(f, t("Flux", "Stream"), &[(t("Échap", "Esc"), t("terminer", "finish"))]);
+        let area = ui::keyboard(f, area, ui::Keys { chars: &ctx.chars(), backspace: false, space: false });
 
         let mut speed = vec![
             Span::styled(t("Vitesse ", "Speed "), dim()),
@@ -479,7 +479,7 @@ impl Flux {
                 ),
             ]),
         ];
-        f.render_widget(Paragraph::new(lines), ui::centered(area, 60, 6));
+        ui::text(f, lines, area, 60, Alignment::Left);
     }
 }
 
@@ -502,7 +502,7 @@ impl Screen for Flux {
 
     fn draw(&mut self, f: &mut Frame, ctx: &Ctx) {
         if self.running {
-            self.draw_running(f);
+            self.draw_running(f, ctx);
         } else {
             self.draw_ready(f, ctx);
         }

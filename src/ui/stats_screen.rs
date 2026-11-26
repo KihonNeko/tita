@@ -73,11 +73,22 @@ fn overview(ctx: &Ctx) -> Vec<Line<'static>> {
             Span::styled(format!("{:<22}", t("Caractères débloqués", "Unlocked characters")), dim()),
             Span::styled(format!("{unlocked} / {total}"), bold(Color::White)),
             Span::styled(
-                format!("  {}  {}", ui::bar(unlocked as f32 / total.max(1) as f32, 20), track.label()),
+                if ui::mobile() {
+                    String::new()
+                } else {
+                    format!("  {}  {}", ui::bar(unlocked as f32 / total.max(1) as f32, 20), track.label())
+                },
                 dim(),
             ),
         ]),
     ];
+    if ui::mobile() {
+        // Étroit : la barre a sa propre ligne, alignée sur les valeurs.
+        lines.push(Line::styled(
+            format!("{:22}{}", "", ui::bar(unlocked as f32 / total.max(1) as f32, 14)),
+            dim(),
+        ));
+    }
     if let Some(acc) = st.recent_accuracy(&ctx.chars()) {
         lines.push(Line::from(vec![
             Span::styled(format!("{:<22}", t("Précision récente", "Recent accuracy")), dim()),
@@ -168,17 +179,60 @@ impl StatsScreen {
         }
         let more = if rows > visible { t("↑↓ pour faire défiler · ", "↑↓ to scroll · ") } else { "" };
         lines.push(Line::styled(
-            crate::tr!(
-                "{more}Précision : 30 dernières réponses · en gris : jamais vu",
-                "{more}Accuracy: last 30 answers · in grey: never seen"
-            ),
+            if ui::mobile() {
+                t("Précision sur les 30 dernières réponses", "Accuracy over the last 30 answers").to_string()
+            } else {
+                crate::tr!(
+                    "{more}Précision : 30 dernières réponses · en gris : jamais vu",
+                    "{more}Accuracy: last 30 answers · in grey: never seen"
+                )
+            },
             dim(),
         ));
         lines
     }
 }
 
+/// Sessions sur écran étroit : deux lignes par session.
+fn sessions_narrow(ctx: &Ctx) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+    for s in ctx.stats.sessions.iter().rev().take(LAST_SESSIONS) {
+        let acc = s.accuracy();
+        lines.push(Line::from(vec![
+            Span::styled(format!("{}  ", s.date), dim()),
+            Span::styled(s.mode.clone(), bold(Color::White)),
+        ]));
+        lines.push(Line::from(vec![
+            Span::raw(format!("  {}  ", ui::mmss(s.secs as u64))),
+            Span::styled(format!("{:.0} %", acc * 100.0), Style::default().fg(acc_color(acc))),
+            Span::styled(crate::tr!("  {:.0}/{:.0} mots/min", "  {:.0}/{:.0} wpm", s.char_wpm, s.eff_wpm), dim()),
+        ]));
+    }
+    lines
+}
+
 fn sessions(ctx: &Ctx) -> Vec<Line<'static>> {
+    let mut lines = if ui::mobile() {
+        sessions_narrow(ctx)
+    } else {
+        sessions_wide(ctx)
+    };
+    if ctx.stats.sessions.is_empty() {
+        lines.push(Line::styled(t("Aucune session terminée pour l'instant.", "No finished session yet."), dim()));
+    } else if ctx.stats.sessions.len() > LAST_SESSIONS {
+        lines.push(Line::styled(
+            crate::tr!(
+                "… et {} plus anciennes.",
+                "… and {} older.",
+                ctx.stats.sessions.len() - LAST_SESSIONS
+            ),
+            dim(),
+        ));
+    }
+    lines
+}
+
+fn sessions_wide(ctx: &Ctx) -> Vec<Line<'static>> {
     let mut lines = vec![Line::styled(
         format!(
             "{:<10}  {:<18} {:>6}  {:>9}  {}",
@@ -198,18 +252,6 @@ fn sessions(ctx: &Ctx) -> Vec<Line<'static>> {
             Span::styled(format!("{:>7.0} %", acc * 100.0), Style::default().fg(acc_color(acc))),
             Span::styled(crate::tr!("  {:.0}/{:.0} mots/min", "  {:.0}/{:.0} wpm", s.char_wpm, s.eff_wpm), dim()),
         ]));
-    }
-    if ctx.stats.sessions.is_empty() {
-        lines.push(Line::styled(t("Aucune session terminée pour l'instant.", "No finished session yet."), dim()));
-    } else if ctx.stats.sessions.len() > LAST_SESSIONS {
-        lines.push(Line::styled(
-            crate::tr!(
-                "… et {} plus anciennes.",
-                "… and {} older.",
-                ctx.stats.sessions.len() - LAST_SESSIONS
-            ),
-            dim(),
-        ));
     }
     lines
 }
@@ -237,6 +279,14 @@ impl Screen for StatsScreen {
             KeyCode::PageDown => self.scroll = self.scroll.saturating_add(10).min(1000),
             KeyCode::PageUp | KeyCode::Home => self.scroll = 0,
             _ => {}
+        }
+        Nav::Stay
+    }
+
+    fn on_item(&mut self, index: usize, _ctx: &mut Ctx) -> Nav {
+        if index < TABS.len() && index != self.tab {
+            self.tab = index;
+            self.scroll = 0;
         }
         Nav::Stay
     }
@@ -271,18 +321,28 @@ impl Screen for StatsScreen {
             return;
         }
 
+        let mobile = ui::mobile();
+        // Sur mobile les onglets se touchent directement ; seul le défilement
+        // garde des boutons.
+        let keys = if mobile { "←→" } else { "Tab ←→" };
         let area = ui::frame(
             f,
             t("Statistiques", "Statistics"),
-            &[("Tab ←→", t("onglet", "tab")), ("↑↓", t("défiler", "scroll")), (t("Échap", "Esc"), t("retour", "back"))],
+            &[(keys, t("onglet", "tab")), ("↑↓", t("défiler", "scroll")), (t("Échap", "Esc"), t("retour", "back"))],
         );
         let [tabs, body] = Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).areas(area);
+        let sep = if mobile { " │ " } else { "  │  " };
         let mut spans = Vec::new();
+        let mut x = tabs.x;
         for (i, (fr, en)) in TABS.iter().enumerate() {
             if i > 0 {
-                spans.push(Span::styled("  │  ", dim()));
+                spans.push(Span::styled(sep, dim()));
+                x += sep.chars().count() as u16;
             }
             let style = if i == self.tab { bold(ui::ACCENT) } else { dim() };
+            let w = t(fr, en).chars().count() as u16;
+            ui::touch::item(Rect { x: x.saturating_sub(1), y: tabs.y.saturating_sub(1), width: w + 2, height: 3 }, i);
+            x += w;
             spans.push(Span::styled(t(fr, en), style));
         }
         f.render_widget(Paragraph::new(Line::from(spans)), tabs);
@@ -292,7 +352,9 @@ impl Screen for StatsScreen {
             1 => self.chars_table(ctx, body),
             _ => sessions(ctx),
         };
-        f.render_widget(Paragraph::new(lines), body);
+        let body_text = Paragraph::new(lines);
+        // Les tableaux sont déjà à la bonne largeur ; le reste se replie.
+        f.render_widget(if mobile && self.tab != 1 { body_text.wrap(Wrap { trim: false }) } else { body_text }, body);
     }
 }
 

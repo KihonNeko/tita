@@ -1,16 +1,6 @@
 //! tita — apprendre le Morse à l'oreille, dans le terminal.
 
-mod app;
-mod audio;
-mod config;
-mod curriculum;
-mod data;
-mod i18n;
-mod modes;
-mod morse;
-mod picker;
-mod stats;
-mod ui;
+use tita::{app, audio, config, i18n, morse, stats, ui};
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -49,7 +39,7 @@ fn main() -> Result<()> {
         Some(Cmd::Show { text }) => {
             for c in text.join(" ").chars() {
                 match morse::pattern(c) {
-                    Some(p) => println!("{}  {}", crate::morse::up(c), p),
+                    Some(p) => println!("{}  {}", morse::up(c), p),
                     None => println!(),
                 }
             }

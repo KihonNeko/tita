@@ -9,7 +9,8 @@ use crate::ui::{self, acc_color, bold, dim};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Paragraph, Wrap};
+use ratatui::layout::Alignment;
+use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 use std::time::{Duration, Instant};
 
@@ -351,10 +352,17 @@ impl Screen for Koch {
                         "Des groupes de 5 caractères vont défiler sans s'arrêter.",
                         "Groups of 5 characters will play without stopping.",
                     )),
-                    Line::raw(t(
-                        "Tape ce que tu entends, Espace entre les groupes.",
-                        "Type what you hear, Space between groups.",
-                    )),
+                    Line::raw(if ui::mobile() {
+                        t(
+                            "Tape ce que tu entends, « groupe suivant » entre les groupes.",
+                            "Type what you hear, \"next group\" between groups.",
+                        )
+                    } else {
+                        t(
+                            "Tape ce que tu entends, Espace entre les groupes.",
+                            "Type what you hear, Space between groups.",
+                        )
+                    }),
                     Line::raw(t(
                         "Une lettre t'échappe ? Laisse-la, reprends à la suivante.",
                         "Missed a letter? Skip it and pick up at the next one.",
@@ -373,22 +381,17 @@ impl Screen for Koch {
                         )),
                     ]),
                 ];
-                let h = lines.len() as u16 + 2;
-                f.render_widget(
-                    Paragraph::new(lines).wrap(Wrap { trim: false }),
-                    ui::centered(area, 60, h),
-                );
+                ui::text(f, lines, area, 60, Alignment::Left);
             }
             Phase::Listening => {
-                let area = ui::frame(
-                    f,
-                    "Koch",
-                    &[
-                        (t("Espace", "Space"), t("groupe suivant", "next group")),
-                        ("⌫", t("corriger", "fix")),
-                        (t("Échap", "Esc"), t("arrêter", "stop")),
-                    ],
-                );
+                let mut hints = vec![(t("Espace", "Space"), t("groupe suivant", "next group"))];
+                if !ui::mobile() {
+                    // Sur mobile, ⌫ est une touche du clavier affiché.
+                    hints.push(("⌫", t("corriger", "fix")));
+                }
+                hints.push((t("Échap", "Esc"), t("arrêter", "stop")));
+                let area = ui::frame(f, "Koch", &hints);
+                let area = ui::keyboard(f, area, ui::Keys { chars: &ctx.chars(), backspace: true, space: false });
                 let total = ctx.cfg.session_secs as u64;
                 let secs = now.saturating_duration_since(self.started).as_secs();
                 let left = total.saturating_sub(secs);
@@ -400,7 +403,7 @@ impl Screen for Koch {
                 };
                 let lines = vec![
                     Line::from(vec![
-                        Span::styled(ui::bar(ratio, 20), dim()),
+                        Span::styled(ui::bar(ratio, if ui::mobile() { 8 } else { 20 }), dim()),
                         Span::styled(
                             crate::tr!(
                                 "  {status} · groupe {}",
@@ -421,14 +424,15 @@ impl Screen for Koch {
                         dim(),
                     ),
                 ];
-                f.render_widget(Paragraph::new(lines), ui::centered(area, 64, 5));
+                ui::text(f, lines, area, 64, Alignment::Left);
             }
             Phase::Finishing(deadline) => {
-                let area = ui::frame(
-                    f,
-                    "Koch",
-                    &[(t("Entrée", "Enter"), t("valider", "submit")), ("⌫", t("corriger", "fix"))],
-                );
+                let mut hints = vec![(t("Entrée", "Enter"), t("valider", "submit"))];
+                if !ui::mobile() {
+                    hints.push(("⌫", t("corriger", "fix")));
+                }
+                let area = ui::frame(f, "Koch", &hints);
+                let area = ui::keyboard(f, area, ui::Keys { chars: &ctx.chars(), backspace: true, space: false });
                 let left = deadline.saturating_duration_since(now).as_secs() + 1;
                 let lines = vec![
                     Line::styled(t("Terminé. Finis ta saisie.", "Done. Finish typing."), bold(ui::ACCENT)),
@@ -436,14 +440,18 @@ impl Screen for Koch {
                     self.input_line(area.width.min(60)),
                     Line::raw(""),
                     Line::styled(
-                        crate::tr!(
-                            "Entrée pour valider (correction dans {left} s).",
-                            "Enter to submit (grading in {left} s)."
-                        ),
+                        if ui::mobile() {
+                            crate::tr!("Correction dans {left} s.", "Grading in {left} s.")
+                        } else {
+                            crate::tr!(
+                                "Entrée pour valider (correction dans {left} s).",
+                                "Enter to submit (grading in {left} s)."
+                            )
+                        },
                         dim(),
                     ),
                 ];
-                f.render_widget(Paragraph::new(lines), ui::centered(area, 64, 5));
+                ui::text(f, lines, area, 64, Alignment::Left);
             }
             Phase::Review => {
                 let area = ui::frame(

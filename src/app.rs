@@ -4,9 +4,10 @@ use crate::audio::Audio;
 use crate::config::Config;
 use crate::morse::Timing;
 use crate::stats::{self, Session, Stats};
-use crate::ui;
+use crate::ui::{self, Tap, Zone};
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use ratatui::layout::Rect;
 use ratatui::Frame;
 use std::time::{Duration, Instant};
 
@@ -116,8 +117,12 @@ pub trait Screen {
     /// Touche appuyée (les répétitions et relâchements ne passent pas ici).
     fn on_key(&mut self, key: KeyEvent, ctx: &mut Ctx) -> Nav;
     /// Touche relâchée — seulement si l'écran a activé le protocole clavier
-    /// étendu du terminal (voir mode émission).
+    /// étendu du terminal (voir mode émission), ou au doigt sur mobile.
     fn on_key_release(&mut self, _key: KeyEvent, _ctx: &mut Ctx) {}
+    /// Élément de liste touché du doigt (zones déclarées avec `ui::tap_item`).
+    fn on_item(&mut self, _index: usize, _ctx: &mut Ctx) -> Nav {
+        Nav::Stay
+    }
     /// Appelé environ toutes les 5 ms : logique temporelle (minuteries, flux).
     fn on_tick(&mut self, _ctx: &mut Ctx) -> Nav {
         Nav::Stay
@@ -125,32 +130,200 @@ pub trait Screen {
     fn draw(&mut self, f: &mut Frame, ctx: &Ctx);
 }
 
-pub fn run(mut ctx: Ctx, first: Box<dyn Screen>) -> Result<()> {
+/// Un doigt posé sur l'écran.
+struct Finger {
+    id: u64,
+    /// Zone touchée à l'appui (`None` : à côté de tout bouton).
+    zone: Option<Zone>,
+    /// Dernière rangée connue, pour le défilement au doigt.
+    row: u16,
+}
+
+/// La pile d'écrans et son contexte, sans rien savoir de l'affichage : le
+/// terminal (`run`) et la coquille mobile la pilotent de la même façon.
+pub struct Shell {
+    pub ctx: Ctx,
+    stack: Vec<Box<dyn Screen>>,
+    fingers: Vec<Finger>,
+    quit: bool,
+}
+
+impl Shell {
+    pub fn new(mut ctx: Ctx, mut first: Box<dyn Screen>) -> Shell {
+        first.on_enter(&mut ctx);
+        Shell { ctx, stack: vec![first], fingers: Vec::new(), quit: false }
+    }
+
+    /// Faux quand l'application doit se fermer.
+    pub fn running(&self) -> bool {
+        !self.quit && !self.stack.is_empty()
+    }
+
+    fn apply(&mut self, nav: Nav) {
+        match nav {
+            Nav::Stay => return,
+            Nav::Quit => {
+                self.quit = true;
+                return;
+            }
+            Nav::Back => {
+                if let Some(mut s) = self.stack.pop() {
+                    s.on_leave(&mut self.ctx);
+                }
+            }
+            Nav::Push(s) => {
+                if let Some(top) = self.stack.last_mut() {
+                    top.on_leave(&mut self.ctx);
+                }
+                self.stack.push(s);
+            }
+            Nav::Replace(s) => {
+                if let Some(mut old) = self.stack.pop() {
+                    old.on_leave(&mut self.ctx);
+                }
+                self.stack.push(s);
+            }
+        }
+        self.ctx.audio.set_key(false);
+        // Les doigts encore posés appartenaient à l'écran précédent.
+        self.fingers.clear();
+        if let Some(top) = self.stack.last_mut() {
+            top.on_enter(&mut self.ctx);
+        }
+    }
+
+    /// Touche appuyée. Renvoie vrai si l'écran a changé.
+    pub fn key(&mut self, key: KeyEvent) -> bool {
+        let Some(top) = self.stack.last_mut() else { return false };
+        let nav = top.on_key(key, &mut self.ctx);
+        let changed = !matches!(nav, Nav::Stay);
+        self.apply(nav);
+        changed
+    }
+
+    pub fn release(&mut self, key: KeyEvent) {
+        if let Some(top) = self.stack.last_mut() {
+            top.on_key_release(key, &mut self.ctx);
+        }
+    }
+
+    pub fn tick(&mut self) {
+        let Some(top) = self.stack.last_mut() else { return };
+        let nav = top.on_tick(&mut self.ctx);
+        self.apply(nav);
+    }
+
+    /// Dessine l'écran courant et relève ses zones tactiles.
+    pub fn draw(&mut self, f: &mut Frame) {
+        ui::touch::clear();
+        if let Some(top) = self.stack.last_mut() {
+            top.draw(f, &self.ctx);
+        }
+    }
+
+    /// Doigt posé sur la cellule (col, row) de la dernière image dessinée.
+    pub fn touch_down(&mut self, id: u64, col: u16, row: u16) {
+        self.fingers.retain(|t| t.id != id);
+        let zone = ui::touch::hit(col, row);
+        self.fingers.push(Finger { id, zone, row });
+        match zone.and_then(|z| z.tap) {
+            Some(Tap::Key(code)) => {
+                self.key(KeyEvent::new(code, KeyModifiers::NONE));
+            }
+            Some(Tap::Item(i)) => {
+                if let Some(top) = self.stack.last_mut() {
+                    let nav = top.on_item(i, &mut self.ctx);
+                    self.apply(nav);
+                }
+            }
+            None => {}
+        }
+    }
+
+    /// Doigt déplacé : hors de tout bouton, un glissement vertical fait
+    /// défiler (une touche ↑ ou ↓ par rangée parcourue).
+    pub fn touch_move(&mut self, id: u64, _col: u16, row: u16) {
+        let Some(t) = self.fingers.iter_mut().find(|t| t.id == id) else { return };
+        if t.zone.is_some() || row == t.row {
+            return;
+        }
+        let (code, steps) = if row < t.row {
+            (KeyCode::Down, t.row - row)
+        } else {
+            (KeyCode::Up, row - t.row)
+        };
+        t.row = row;
+        for _ in 0..steps {
+            if self.key(KeyEvent::new(code, KeyModifiers::NONE)) {
+                break;
+            }
+        }
+    }
+
+    /// Doigt levé : relâche la touche qu'il tenait (manipulateur).
+    pub fn touch_up(&mut self, id: u64) {
+        let Some(i) = self.fingers.iter().position(|t| t.id == id) else { return };
+        let t = self.fingers.remove(i);
+        if let Some(Tap::Key(code)) = t.zone.and_then(|z| z.tap) {
+            self.release(KeyEvent::new(code, KeyModifiers::NONE));
+        }
+    }
+
+    /// Zones actuellement tenues par un doigt (retour visuel).
+    pub fn pressed(&self) -> Vec<Rect> {
+        self.fingers.iter().filter_map(|t| t.zone.filter(|z| z.tap.is_some()).map(|z| z.rect)).collect()
+    }
+
+    /// L'application passe en arrière-plan : silence, et tout est enregistré
+    /// (sur mobile, le processus peut être tué sans prévenir).
+    pub fn pause(&mut self) {
+        for t in std::mem::take(&mut self.fingers) {
+            if let Some(Tap::Key(code)) = t.zone.and_then(|z| z.tap) {
+                self.release(KeyEvent::new(code, KeyModifiers::NONE));
+            }
+        }
+        self.ctx.audio.set_key(false);
+        self.ctx.audio.stop();
+        let _ = self.ctx.stats.save();
+        let _ = self.ctx.cfg.save();
+    }
+
+    /// Fermeture : quitte l'écran courant, coupe le son, enregistre.
+    pub fn close(&mut self) {
+        if let Some(mut s) = self.stack.pop() {
+            s.on_leave(&mut self.ctx);
+        }
+        self.stack.clear();
+        self.ctx.audio.stop();
+        let _ = self.ctx.stats.save();
+        let _ = self.ctx.cfg.save();
+    }
+}
+
+/// Boucle principale dans le terminal.
+pub fn run(ctx: Ctx, first: Box<dyn Screen>) -> Result<()> {
     let mut term = ratatui::init();
-    let mut stack: Vec<Box<dyn Screen>> = vec![first];
-    stack[0].on_enter(&mut ctx);
+    let mut shell = Shell::new(ctx, first);
     let mut last_draw = Instant::now() - Duration::from_secs(1);
     let mut dirty = true;
 
     let res = (|| -> Result<()> {
-        loop {
-            let mut navs: Vec<Nav> = Vec::new();
+        while shell.running() {
+            let mut changed = false;
             if event::poll(Duration::from_millis(5))? {
-                while event::poll(Duration::ZERO)? {
+                while !changed && event::poll(Duration::ZERO)? {
                     match event::read()? {
                         Event::Key(k) => {
-                            let top = stack.last_mut().unwrap();
                             match k.kind {
                                 KeyEventKind::Press => {
                                     if k.code == KeyCode::Char('c')
                                         && k.modifiers.contains(KeyModifiers::CONTROL)
                                     {
-                                        navs.push(Nav::Quit);
-                                    } else {
-                                        navs.push(top.on_key(k, &mut ctx));
+                                        return Ok(());
                                     }
+                                    changed = shell.key(k);
                                 }
-                                KeyEventKind::Release => top.on_key_release(k, &mut ctx),
+                                KeyEventKind::Release => shell.release(k),
                                 KeyEventKind::Repeat => {}
                             }
                             dirty = true;
@@ -158,58 +331,25 @@ pub fn run(mut ctx: Ctx, first: Box<dyn Screen>) -> Result<()> {
                         Event::Resize(..) => dirty = true,
                         _ => {}
                     }
-                    if navs.iter().any(|n| !matches!(n, Nav::Stay)) {
-                        break;
-                    }
                 }
             }
-            if navs.iter().all(|n| matches!(n, Nav::Stay)) {
-                navs.push(stack.last_mut().unwrap().on_tick(&mut ctx));
+            if !changed {
+                shell.tick();
             }
-            for nav in navs {
-                match nav {
-                    Nav::Stay => continue,
-                    Nav::Quit => return Ok(()),
-                    Nav::Back => {
-                        if let Some(mut s) = stack.pop() {
-                            s.on_leave(&mut ctx);
-                        }
-                        if stack.is_empty() {
-                            return Ok(());
-                        }
-                    }
-                    Nav::Push(s) => {
-                        stack.last_mut().unwrap().on_leave(&mut ctx);
-                        stack.push(s);
-                    }
-                    Nav::Replace(s) => {
-                        if let Some(mut old) = stack.pop() {
-                            old.on_leave(&mut ctx);
-                        }
-                        stack.push(s);
-                    }
-                }
-                ctx.audio.set_key(false);
-                stack.last_mut().unwrap().on_enter(&mut ctx);
-                dirty = true;
+            if !shell.running() {
                 break;
             }
-            if dirty || last_draw.elapsed() >= Duration::from_millis(33) {
-                let top = stack.last_mut().unwrap();
-                term.draw(|f| top.draw(f, &ctx))?;
+            if dirty || changed || last_draw.elapsed() >= Duration::from_millis(33) {
+                term.draw(|f| shell.draw(f))?;
                 last_draw = Instant::now();
                 dirty = false;
             }
         }
+        Ok(())
     })();
 
-    if let Some(mut s) = stack.pop() {
-        s.on_leave(&mut ctx);
-    }
-    ctx.audio.stop();
+    shell.close();
     ratatui::restore();
-    let _ = ctx.stats.save();
-    let _ = ctx.cfg.save();
     res
 }
 
@@ -218,6 +358,7 @@ pub fn run(mut ctx: Ctx, first: Box<dyn Screen>) -> Result<()> {
 pub fn render_to_string(screen: &mut dyn Screen, ctx: &Ctx, w: u16, h: u16) -> String {
     use ratatui::backend::TestBackend;
     let mut term = ratatui::Terminal::new(TestBackend::new(w, h)).unwrap();
+    ui::touch::clear();
     term.draw(|f| screen.draw(f, ctx)).unwrap();
     let buf = term.backend().buffer().clone();
     let mut out = String::new();
