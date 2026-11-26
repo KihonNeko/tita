@@ -28,6 +28,11 @@ pub enum Face {
     Accent,
     /// Touche inactive : simple contour.
     Ghost,
+    /// Ligne de liste : une carte qui déborde d'une demi-rangée au-dessus et
+    /// au-dessous de son texte.
+    Card,
+    /// Carte de la ligne sélectionnée.
+    Selected,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

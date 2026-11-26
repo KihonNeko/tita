@@ -5,7 +5,7 @@ use crate::app::{Ctx, Nav, Screen};
 use crate::i18n::t;
 use crate::ui::{self, acc_color, bold, dim};
 use crossterm::event::{KeyCode, KeyEvent};
-use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Paragraph, Wrap};
@@ -324,28 +324,38 @@ impl Screen for StatsScreen {
         let mobile = ui::mobile();
         // Sur mobile les onglets se touchent directement ; seul le défilement
         // garde des boutons.
-        let keys = if mobile { "←→" } else { "Tab ←→" };
-        let area = ui::frame(
-            f,
-            t("Statistiques", "Statistics"),
-            &[(keys, t("onglet", "tab")), ("↑↓", t("défiler", "scroll")), (t("Échap", "Esc"), t("retour", "back"))],
-        );
-        let [tabs, body] = Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).areas(area);
-        let sep = if mobile { " │ " } else { "  │  " };
-        let mut spans = Vec::new();
-        let mut x = tabs.x;
-        for (i, (fr, en)) in TABS.iter().enumerate() {
-            if i > 0 {
-                spans.push(Span::styled(sep, dim()));
-                x += sep.chars().count() as u16;
-            }
-            let style = if i == self.tab { bold(ui::ACCENT) } else { dim() };
-            let w = t(fr, en).chars().count() as u16;
-            ui::touch::item(Rect { x: x.saturating_sub(1), y: tabs.y.saturating_sub(1), width: w + 2, height: 3 }, i);
-            x += w;
-            spans.push(Span::styled(t(fr, en), style));
+        let mut hints = vec![("↑↓", t("défiler", "scroll")), (t("Échap", "Esc"), t("retour", "back"))];
+        if !mobile {
+            hints.insert(0, ("Tab ←→", t("onglet", "tab")));
         }
-        f.render_widget(Paragraph::new(Line::from(spans)), tabs);
+        let area = ui::frame(f, t("Statistiques", "Statistics"), &hints);
+        let [tabs, body] = Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).areas(area);
+        if mobile {
+            // Onglets en pastilles côte à côte, à toucher.
+            let mut x = tabs.x;
+            for (i, (fr, en)) in TABS.iter().enumerate() {
+                let w = (t(fr, en).chars().count() as u16 + 2).min((tabs.x + tabs.width).saturating_sub(x));
+                let rect = Rect { x, y: tabs.y, width: w, height: 1 };
+                let (face, style) = if i == self.tab {
+                    (ui::Face::Selected, bold(Color::White))
+                } else {
+                    (ui::Face::Card, dim())
+                };
+                ui::touch::zone(rect, Some(ui::Tap::Item(i)), face);
+                f.render_widget(Paragraph::new(Line::styled(t(fr, en), style)).alignment(Alignment::Center), rect);
+                x += w;
+            }
+        } else {
+            let mut spans = Vec::new();
+            for (i, (fr, en)) in TABS.iter().enumerate() {
+                if i > 0 {
+                    spans.push(Span::styled("  │  ", dim()));
+                }
+                let style = if i == self.tab { bold(ui::ACCENT) } else { dim() };
+                spans.push(Span::styled(t(fr, en), style));
+            }
+            f.render_widget(Paragraph::new(Line::from(spans)), tabs);
+        }
 
         let lines = match self.tab {
             0 => overview(ctx),

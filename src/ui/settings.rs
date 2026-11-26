@@ -303,23 +303,16 @@ impl Screen for Settings {
             let selected = *item == current;
             let value = Self::value(*item, ctx);
             if mobile {
-                // Deux rangées par réglage (nom, valeur) : une cible assez
-                // haute pour le doigt, qui tient sur un écran étroit.
+                // Une carte par réglage : nom à gauche, valeur à droite.
                 let y = area.y + 2 * i as u16;
-                if y + 2 <= area.y + area.height {
-                    let full = f.area();
-                    ui::touch::item(Rect { x: full.x, y, width: full.width, height: 2 }, i);
-                }
-                if selected {
-                    lines.push(Line::styled(format!(" ▶ {}", item.label()), bold(ui::ACCENT)));
-                    lines.push(Line::from(vec![
-                        Span::styled("     ◀ ", dim()),
-                        Span::styled(value, bold(Color::White)),
-                        Span::styled(" ▶", dim()),
-                    ]));
-                } else {
-                    lines.push(Line::raw(format!("   {}", item.label())));
-                    lines.push(Line::styled(format!("       {value}"), dim()));
+                if y < area.y + area.height {
+                    let row = ui::card(f, area, y, 1, i, selected);
+                    let (label, value) = if selected {
+                        (Span::styled(item.label(), bold(Color::White)), Span::styled(format!("◀ {value} ▶"), bold(ui::ACCENT)))
+                    } else {
+                        (Span::raw(item.label()), Span::styled(value, dim()))
+                    };
+                    f.render_widget(Paragraph::new(ui::split_line(label, value, row.width)), row);
                 }
                 continue;
             }
@@ -349,9 +342,6 @@ impl Screen for Settings {
         let per_line = ((area.width as usize).saturating_sub(5) / 2).max(1);
         // Sur mobile la place est comptée : la liste n'apparaît que sur son réglage.
         let show_list = !mobile || current == Item::Unlocked;
-        if mobile {
-            lines.push(Line::raw(""));
-        }
         for (row, chunk) in order.chunks(per_line).enumerate().filter(|_| show_list) {
             let mut spans = vec![Span::raw("     ")];
             for (j, c) in chunk.iter().enumerate() {
@@ -376,7 +366,10 @@ impl Screen for Settings {
                 bold(ui::ERR),
             ));
         }
-        f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
+        // Sur mobile, les cartes des réglages occupent le haut de la zone.
+        let used = if mobile { (2 * ITEMS.len() as u16).min(area.height) } else { 0 };
+        let rest = Rect { y: area.y + used, height: area.height - used, ..area };
+        f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), rest);
     }
 }
 

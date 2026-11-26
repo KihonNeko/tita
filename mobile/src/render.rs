@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use tita::ratatui::buffer::Buffer;
 use tita::ratatui::layout::Rect;
 use tita::ratatui::style::{Color, Modifier};
-use tita::ui::{Face, Zone, BIG};
+use tita::ui::{Face, Zone, BIG, TITLE};
 
 const REGULAR: &[u8] = include_bytes!("../assets/fonts/JetBrainsMono-Regular.ttf");
 const BOLD: &[u8] = include_bytes!("../assets/fonts/JetBrainsMono-Bold.ttf");
@@ -21,11 +21,16 @@ const KEY_DOWN: u32 = 0x3d4a5e;
 const GHOST: u32 = 0x151a21;
 const ACCENT: u32 = 0x5cd0de;
 const ACCENT_DOWN: u32 = 0xb4eef4;
+const CARD: u32 = 0x171d26;
+const CARD_DOWN: u32 = 0x263140;
+const SELECTED: u32 = 0x163842;
 
 /// Hauteur d'une cellule, en largeurs de cellule.
 const ASPECT: f32 = 2.1;
-/// Agrandissement des caractères marqués `BIG`.
-const BIG_SCALE: usize = 3;
+/// Agrandissement des caractères marqués `BIG`, en pourcentage.
+const BIG_SCALE: u32 = 300;
+/// Agrandissement des textes marqués `TITLE`, en pourcentage.
+const TITLE_SCALE: u32 = 135;
 
 /// Couleur de terminal -> couleur d'écran.
 fn rgb(c: Color, default: u32) -> u32 {
@@ -139,7 +144,8 @@ pub struct Renderer {
     pub cell_h: usize,
     /// Ligne de base, depuis le haut de la cellule.
     baseline: f32,
-    cache: HashMap<(char, bool, usize), Glyph>,
+    /// Clé : (caractère, gras, agrandissement en pourcentage).
+    cache: HashMap<(char, bool, u32), Glyph>,
 }
 
 impl Renderer {
@@ -181,24 +187,27 @@ impl Renderer {
         self.fonts.iter().any(|f| f.lookup_glyph_index(c) != 0)
     }
 
-    fn glyph(&mut self, c: char, bold: bool, scale: usize) -> &Glyph {
+    fn glyph(&mut self, c: char, bold: bool, scale: u32) -> &Glyph {
         let (fonts, px, cell_w, baseline) = (&self.fonts, self.px, self.cell_w, self.baseline);
         self.cache.entry((c, bold, scale)).or_insert_with(|| {
             let wanted = &fonts[bold as usize];
             let font = if wanted.lookup_glyph_index(c) != 0 { wanted } else { &fonts[2] };
-            let (m, cov) = font.rasterize(c, px * scale as f32);
-            let box_w = (cell_w * scale) as f32;
+            let s = scale as f32 / 100.0;
+            let (m, cov) = font.rasterize(c, px * s);
+            let box_w = cell_w as f32 * s;
             Glyph {
                 w: m.width,
                 h: m.height,
                 x: ((box_w - m.advance_width) / 2.0 + m.xmin as f32).round() as i32,
-                y: (baseline * scale as f32) as i32 - (m.ymin + m.height as i32),
+                y: (baseline * s) as i32 - (m.ymin + m.height as i32),
                 cov,
             }
         })
     }
 
-    fn put(&mut self, out: &mut Canvas, c: char, bold: bool, scale: usize, x: i32, y: i32, color: u32) {
+    /// Dessine `c` agrandi de `scale` %, dans une case dont (x, y) est le coin
+    /// haut gauche (case elle aussi agrandie).
+    fn put(&mut self, out: &mut Canvas, c: char, bold: bool, scale: u32, x: i32, y: i32, color: u32) {
         let g = self.glyph(c, bold, scale);
         for row in 0..g.h {
             let py = y + g.y + row as i32;
@@ -241,25 +250,49 @@ impl Renderer {
         // 2. Touches et boutons.
         let pad = (cw / 6).max(2) as i32;
         for z in zones {
-            let down = pressed.contains(&z.rect);
+            let card = matches!(z.face, Face::Card | Face::Selected);
+            // Une carte s'allume aussi quand le doigt est sur sa marge.
+            let down = if card { pressed.iter().any(|p| p.intersects(z.rect)) } else { pressed.contains(&z.rect) };
             let color = match z.face {
                 Face::None => continue,
                 Face::Solid => if down { KEY_DOWN } else { KEY },
                 Face::Accent => if down { ACCENT_DOWN } else { ACCENT },
                 Face::Ghost => GHOST,
+                Face::Card => if down { CARD_DOWN } else { CARD },
+                Face::Selected => SELECTED,
             };
-            let (x, y) = origin(z.rect.x, z.rect.y);
+            let (x, mut y) = origin(z.rect.x, z.rect.y);
             let w = (z.rect.width as usize * cw).saturating_sub(2 * pad as usize);
-            let h = (z.rect.height as usize * ch).saturating_sub(2 * pad as usize);
-            out.round_rect(x + pad, y + pad, w, h, cw as f32 * 0.45, color);
+            let mut h = z.rect.height as usize * ch;
+            if card {
+                // Déborde d'une demi-rangée de chaque côté de son texte.
+                y -= (ch / 2) as i32;
+                h += ch;
+            }
+            out.round_rect(x + pad, y + pad, w, h.saturating_sub(2 * pad as usize), cw as f32 * 0.45, color);
         }
 
         // 3. Caractères, les grands en dernier (ils débordent sur leurs voisins).
+        let line = (ch / 14).max(1);
+        let is_bar = |col: u16, row: u16| {
+            col < area.width && matches!(buf[(col, row)].symbol(), "█" | "░")
+        };
         let mut big = Vec::new();
         for row in 0..area.height {
+            // Début et pas (en pixels) du texte agrandi en cours sur la rangée.
+            let mut run: Option<(u16, f32, u32)> = None;
             for col in 0..area.width {
                 let cell = &buf[(col, row)];
-                let Some(c) = cell.symbol().chars().next().filter(|c| *c != ' ') else { continue };
+                let titled = cell.modifier.contains(TITLE);
+                if !titled {
+                    run = None;
+                }
+                let Some(c) = cell.symbol().chars().next().filter(|c| *c != ' ') else {
+                    if titled && run.is_none() {
+                        run = Some(self.title_run(buf, col, row));
+                    }
+                    continue;
+                };
                 let reversed = cell.modifier.contains(Modifier::REVERSED);
                 let fg = if reversed { rgb(cell.bg, BG) } else { rgb(cell.fg, FG) };
                 let bold = cell.modifier.contains(Modifier::BOLD);
@@ -268,17 +301,44 @@ impl Renderer {
                     big.push((c, bold, x, y, fg));
                     continue;
                 }
-                // Les pavés et filets sont tracés à la main : ils se
-                // raccordent au pixel près d'une cellule à l'autre.
-                let line = (ch / 14).max(1);
+                if titled {
+                    let (start, step, scale) = *run.get_or_insert_with(|| self.title_run(buf, col, row));
+                    let s = scale as f32 / 100.0;
+                    let dy = ((s - 1.0) * ch as f32 / 2.0) as i32;
+                    let gx = if step == 0.0 {
+                        // Caractère isolé (lettre d'une touche) : centré sur sa cellule.
+                        x - ((s - 1.0) * cw as f32 / 2.0) as i32
+                    } else {
+                        origin(start, row).0 + ((col - start) as f32 * step) as i32
+                    };
+                    self.put(out, c, bold, scale, gx, y - dy, fg);
+                    continue;
+                }
                 match c {
-                    '█' => out.fill(x, y, cw, ch, fg, 255),
-                    '░' => out.fill(x, y, cw, ch, fg, 60),
+                    // Barres de progression : un trait fin aux bouts arrondis
+                    // plutôt que des pavés pleins.
+                    '█' | '░' => {
+                        let color = if c == '█' { fg } else { blend(BG, fg, 60) };
+                        let h = (ch / 3).max(3);
+                        let by = y + ((ch - h) / 2) as i32;
+                        let (first, last) = (col == 0 || !is_bar(col - 1, row), !is_bar(col + 1, row));
+                        if first || last {
+                            out.round_rect(x, by, cw, h, h as f32 / 2.0, color);
+                        }
+                        // Entre deux segments, pas d'arrondi : on rebouche le côté voisin.
+                        match (first, last) {
+                            (true, true) => {}
+                            (true, false) => out.fill(x + (cw / 2) as i32, by, cw - cw / 2, h, color, 255),
+                            (false, true) => out.fill(x, by, cw / 2, h, color, 255),
+                            (false, false) => out.fill(x, by, cw, h, color, 255),
+                        }
+                    }
+                    // Filets et curseurs tracés à la main : nets au pixel près.
                     '─' => out.fill(x, y + (ch / 2) as i32, cw, line, fg, 255),
                     '│' => out.fill(x + ((cw - line) / 2) as i32, y, line, ch, fg, 255),
                     '▏' => out.fill(x, y + (ch / 8) as i32, (cw / 6).max(2), ch * 3 / 4, fg, 255),
                     '▮' => out.fill(x + (cw / 5) as i32, y + (ch / 5) as i32, cw * 3 / 5, ch * 3 / 5, fg, 255),
-                    _ => self.put(out, c, bold, 1, x, y, fg),
+                    _ => self.put(out, c, bold, 100, x, y, fg),
                 }
                 if cell.modifier.contains(Modifier::UNDERLINED) {
                     out.fill(x, y + self.baseline as i32 + line as i32 + 1, cw, line, fg, 255);
@@ -287,9 +347,31 @@ impl Renderer {
         }
         for (c, bold, x, y, fg) in big {
             // Centré sur sa cellule : une cellule de marge de chaque côté.
-            let s = BIG_SCALE as i32;
-            self.put(out, c, bold, BIG_SCALE, x - (s - 1) * cw as i32 / 2, y - (s - 1) * ch as i32 / 2, fg);
+            let extra = BIG_SCALE as i32 - 100;
+            self.put(out, c, bold, BIG_SCALE, x - extra * cw as i32 / 200, y - extra * ch as i32 / 200, fg);
         }
+    }
+
+    /// Texte agrandi commençant en (col, row) : (colonne de départ, pas entre
+    /// caractères en pixels — 0 pour un caractère isolé —, agrandissement en %).
+    /// L'agrandissement est réduit si le texte ne tiendrait pas dans la rangée.
+    fn title_run(&self, buf: &Buffer, col: u16, row: u16) -> (u16, f32, u32) {
+        let width = buf.area.width;
+        let mut end = col;
+        let mut last = col;
+        while end < width && buf[(end, row)].modifier.contains(TITLE) {
+            if buf[(end, row)].symbol() != " " {
+                last = end;
+            }
+            end += 1;
+        }
+        let len = (last - col + 1) as u32;
+        if len == 1 && end - col == 1 {
+            return (col, 0.0, TITLE_SCALE);
+        }
+        let room = (width - col) as u32 * 100 / len;
+        let scale = TITLE_SCALE.min(room).max(100);
+        (col, self.cell_w as f32 * scale as f32 / 100.0, scale)
     }
 }
 

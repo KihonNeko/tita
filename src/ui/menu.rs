@@ -129,24 +129,21 @@ impl Menu {
         let status_h = (status.line_count(area.width) as u16).min(area.height);
         f.render_widget(status, ratatui::layout::Rect { height: status_h, ..area });
 
+        // Une carte par mode : nom et description si la place le permet,
+        // nom seul sur un petit écran.
         let n = SHORT.len() as u16;
         let room = area.height.saturating_sub(status_h + 1);
-        let item_h = (room / n).clamp(1, 3);
-        let full = f.area();
+        let pitch = (room / n).clamp(2, 3);
+        let rows = pitch - 1;
         for (i, (fr, en)) in SHORT.iter().enumerate() {
-            let y = area.y + status_h + 1 + i as u16 * item_h;
-            if y + item_h > area.y + area.height {
+            let y = area.y + status_h + 1 + i as u16 * pitch;
+            if y + rows > area.y + area.height {
                 break;
             }
-            let row = ratatui::layout::Rect { x: area.x, y, width: area.width, height: item_h };
-            ui::touch::item(ratatui::layout::Rect { x: full.x, width: full.width, ..row }, i);
-            let name = t(ITEMS[i].0, ITEMS[i].1);
-            let pad = (area.width as usize).saturating_sub(name.chars().count() + 1);
-            let mut lines = vec![Line::from(vec![
-                Span::styled(name, bold(ratatui::style::Color::White)),
-                Span::styled(format!("{:>pad$}", "›"), dim()),
-            ])];
-            if item_h > 1 {
+            let row = ui::card(f, area, y, rows, i, false);
+            let name = Span::styled(t(ITEMS[i].0, ITEMS[i].1), bold(ratatui::style::Color::White));
+            let mut lines = vec![ui::split_line(name, Span::styled("›", dim()), row.width)];
+            if rows > 1 {
                 lines.push(Line::styled(t(fr, en), dim()));
             }
             f.render_widget(Paragraph::new(lines), row);

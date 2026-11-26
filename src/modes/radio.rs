@@ -227,24 +227,22 @@ impl Screen for Radio {
             let area = ui::frame(f, "Radio", &[(t("Échap", "Esc"), t("retour", "back"))]);
             let head = Paragraph::new(Line::styled(t("Que veux-tu copier ?", "What do you want to copy?"), dim()));
             f.render_widget(head, Rect { height: area.height.min(1), ..area });
-            let full = f.area();
             for (i, item) in TOPICS.iter().enumerate() {
-                // Nom, avertissement éventuel, deux lignes de description, un vide.
-                let y = area.y + 2 + i as u16 * 5;
-                if y + 4 > area.y + area.height {
+                // Carte de trois rangées (nom, deux lignes de description), une de marge.
+                let y = area.y + 2 + i as u16 * 4;
+                if y + 3 > area.y + area.height {
                     break;
                 }
-                let row = Rect { x: area.x, y, width: area.width, height: 4 };
-                ui::touch::item(Rect { x: full.x, width: full.width, ..row }, i);
-                let pad = (area.width as usize).saturating_sub(item.label().chars().count() + 1);
-                let mut lines = vec![Line::from(vec![
-                    Span::styled(item.label(), bold(Color::White)),
-                    Span::styled(format!("{:>pad$}", "›"), dim()),
-                ])];
-                if !ready(*item, &allowed) {
-                    lines.push(Line::styled(t("(caractères à débloquer)", "(characters to unlock)"), bold(ui::WARN)));
-                }
-                lines.push(Line::styled(item.desc(), dim()));
+                let row = ui::card(f, area, y, 3, i, false);
+                let tag = if ready(*item, &allowed) {
+                    Span::styled("›", dim())
+                } else {
+                    Span::styled(t("à débloquer", "to unlock"), bold(ui::WARN))
+                };
+                let lines = vec![
+                    ui::split_line(Span::styled(item.label(), bold(Color::White)), tag, row.width),
+                    Line::styled(item.desc(), dim()),
+                ];
                 f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), row);
             }
             return;

@@ -75,6 +75,8 @@ const MIN_BODY: u16 = 9;
 
 /// Modificateur détourné : la coquille mobile dessine ces cellules en grand.
 pub const BIG: Modifier = Modifier::RAPID_BLINK;
+/// Modificateur détourné : texte un peu agrandi (titres, lettres des touches).
+pub const TITLE: Modifier = Modifier::SLOW_BLINK;
 
 /// Touche(s) désignée(s) par le libellé d'un raccourci : (flèche affichée, touche).
 /// `None` : rien à toucher (retour, ou raccourci propre au clavier).
@@ -159,21 +161,18 @@ fn frame_mobile(f: &mut Frame, title: &str, hints: &[(&str, &str)]) -> Rect {
     ])
     .areas(f.area());
 
+    // Pas de filet sous le titre : un titre agrandi, et de l'air autour.
     let mut header = Vec::new();
     if back {
-        header.push(Span::styled("  ‹  ", bold(ACCENT)));
+        header.push(Span::styled(" ‹ ", bold(ACCENT).add_modifier(TITLE)));
         touch::key(Rect { width: head.width.min(7), ..head }, KeyCode::Esc);
     } else {
         header.push(Span::raw(" "));
         header.push(Span::styled(" tita ", bold(Color::Black).bg(ACCENT)));
         header.push(Span::raw("  "));
     }
-    header.push(Span::styled(title.to_string(), bold(Color::White)));
-    f.render_widget(
-        Paragraph::new(vec![Line::raw(""), Line::from(header)])
-            .block(Block::default().borders(Borders::BOTTOM).border_style(dim())),
-        head,
-    );
+    header.push(Span::styled(title.to_string(), bold(Color::White).add_modifier(TITLE)));
+    f.render_widget(Paragraph::new(vec![Line::raw(""), Line::from(header)]), head);
 
     if !btns.is_empty() {
         // Une rangée de marge au-dessus, puis les boutons côte à côte.
@@ -285,16 +284,38 @@ pub fn keyboard(f: &mut Frame, area: Rect, keys: Keys) -> Rect {
                 KeyCode::Char(c) if *c != ' ' => keys.chars.contains(c),
                 _ => true,
             };
+            // Une lettre seule est agrandie : plus lisible sous le doigt.
+            let cap = if label.chars().count() == 1 { TITLE } else { Modifier::empty() };
             if active {
                 touch::zone(rect, Some(Tap::Key(*code)), Face::Solid);
-                label_in(f, rect, label, bold(Color::White));
+                label_in(f, rect, label, bold(Color::White).add_modifier(cap));
             } else {
                 touch::zone(rect, None, Face::Ghost);
-                label_in(f, rect, label, dim());
+                label_in(f, rect, label, dim().add_modifier(cap));
             }
         }
     }
     Rect { height: area.height.saturating_sub(kb_h + 1), ..area }
+}
+
+/// Carte de liste tactile dont le texte occupe `rows` rangées à partir de
+/// `y` ; la rangée suivante doit rester vide (la carte y déborde). Renvoie la
+/// zone où écrire le texte. Toucher la carte appelle `Screen::on_item(index)`.
+pub fn card(f: &Frame, area: Rect, y: u16, rows: u16, index: usize, selected: bool) -> Rect {
+    let full = f.area();
+    // Toute la bande réagit, marge comprise ; la carte visible est par-dessus.
+    let band = Rect { x: full.x, y, width: full.width, height: rows + 1 }.intersection(full);
+    touch::item(band, index);
+    let face = if selected { Face::Selected } else { Face::Card };
+    touch::zone(Rect { x: full.x, y, width: full.width, height: rows }, Some(Tap::Item(index)), face);
+    Rect { x: area.x, y, width: area.width, height: rows }
+}
+
+/// Une ligne avec `left` à gauche et `right` calé à droite, sur `width` colonnes.
+pub fn split_line(left: Span<'static>, right: Span<'static>, width: u16) -> Line<'static> {
+    let used = left.content.chars().count() + right.content.chars().count();
+    let gap = (width as usize).saturating_sub(used).max(1);
+    Line::from(vec![left, Span::raw(" ".repeat(gap)), right])
 }
 
 /// Paragraphe replié à la largeur disponible (au plus `max_w` colonnes) et
