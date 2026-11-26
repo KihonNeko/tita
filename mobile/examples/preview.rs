@@ -1,4 +1,10 @@
-//! Essai sur PC : fenêtre aux proportions d'un téléphone, et captures.
+//! Sur PC : essayer l'interface mobile sans téléphone.
+//!
+//! - `cargo run -p tita-mobile --example preview` ouvre une fenêtre aux
+//!   proportions d'un téléphone ; la souris fait office de doigt.
+//! - `cargo run -p tita-mobile --example preview -- shots DOSSIER
+//!   [LARGEUR HAUTEUR ÉCHELLE] [--en]` enregistre une capture PNG de chaque
+//!   écran, sans rien afficher.
 
 use std::fs::File;
 use std::io::BufWriter;
@@ -13,7 +19,7 @@ use tita::stats::{Session, Stats};
 use tita::ui;
 use tita_mobile::view::{Insets, View};
 
-pub fn main() {
+fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.first().map(String::as_str) == Some("shots") {
         let en = args.iter().any(|a| a == "--en");

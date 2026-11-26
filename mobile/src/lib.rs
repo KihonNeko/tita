@@ -3,7 +3,8 @@
 //!
 //! - `render` : la grille de caractères -> pixels ;
 //! - `view` : l'application et sa grille, les touchers ;
-//! - `window` : la boucle d'événements (Android, ou fenêtre d'essai sur PC).
+//! - `window` : la boucle d'événements (Android, ou fenêtre d'essai sur PC :
+//!   voir `examples/preview.rs`).
 
 pub mod render;
 pub mod view;

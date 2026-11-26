@@ -51,8 +51,9 @@ rustup target add aarch64-linux-android armv7-linux-androideabi
 ANDROID_HOME=/path/to/sdk mobile/build-apk.sh    # -> target/apk/tita.apk
 ```
 
-To try the phone layout on a computer, `cargo run -p tita-mobile` opens a
-phone-sized window where the mouse stands in for a finger.
+To try the phone layout on a computer,
+`cargo run -p tita-mobile --example preview` opens a phone-sized window where
+the mouse stands in for a finger.
 
 ## Use
 
