@@ -52,6 +52,12 @@ for abi in $ABIS; do
     cargo build -p tita-mobile --lib --release --target "$triple"
   mkdir -p "$OUT/lib/$abi"
   "$TOOLCHAIN/llvm-strip" -o "$OUT/lib/$abi/libtita_mobile.so" "target/$triple/release/libtita_mobile.so"
+  # NativeActivity starts the app through this symbol: without it the APK
+  # installs fine and then closes at once.
+  if ! "$TOOLCHAIN/llvm-nm" -D --defined-only "$OUT/lib/$abi/libtita_mobile.so" | grep -q ' ANativeActivity_onCreate$'; then
+    echo "$abi: libtita_mobile.so does not export ANativeActivity_onCreate" >&2
+    exit 1
+  fi
 done
 
 "$BUILD_TOOLS/aapt2" compile --dir mobile/android/res -o "$OUT/res.zip"
@@ -76,6 +82,8 @@ fi
 export ANDROID_KEYSTORE_PASSWORD
 "$BUILD_TOOLS/apksigner" sign --ks "$ANDROID_KEYSTORE" --ks-pass env:ANDROID_KEYSTORE_PASSWORD \
   --ks-key-alias "${ANDROID_KEY_ALIAS:-tita}" --out "$OUT/tita.apk" "$OUT/aligned.apk"
-"$BUILD_TOOLS/apksigner" verify --print-certs "$OUT/tita.apk" | head -3
+"$BUILD_TOOLS/apksigner" verify --print-certs "$OUT/tita.apk" | head -1
+"$BUILD_TOOLS/aapt2" dump badging "$OUT/tita.apk" \
+  | grep -E "^(package|sdkVersion|targetSdkVersion|launchable-activity|native-code|application-label):"
 rm -f "$OUT/unaligned.apk" "$OUT/aligned.apk" "$OUT/tita.apk.idsig"
 ls -l "$OUT/tita.apk"

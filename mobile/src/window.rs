@@ -27,6 +27,8 @@ struct App {
     size: Option<(u32, u32)>,
     window: Option<Arc<Window>>,
     surface: Option<Surface>,
+    /// Géométrie de la dernière mise en page : (largeur, hauteur, échelle, marges).
+    laid_out: Option<(usize, usize, u32, Insets)>,
     /// Une entrée vient d'arriver : composer sans attendre la prochaine image.
     dirty: bool,
     last_frame: Instant,
@@ -75,6 +77,9 @@ impl App {
         Insets::default()
     }
 
+    /// Refait la mise en page si la fenêtre ou ses marges ont changé. Appelé
+    /// à chaque image : Android annonce les barres système après coup, sans
+    /// événement que winit transmette.
     fn relayout(&mut self) {
         let Some(window) = self.window.clone() else { return };
         let size = window.inner_size();
@@ -82,8 +87,14 @@ impl App {
         if w == 0 || h == 0 {
             return;
         }
+        let scale = window.scale_factor() as f32;
         let insets = self.insets(&window, w, h);
-        self.view.layout(w, h, window.scale_factor() as f32, insets);
+        let geometry = Some((w, h, scale.to_bits(), insets));
+        if geometry == self.laid_out {
+            return;
+        }
+        self.laid_out = geometry;
+        self.view.layout(w, h, scale, insets);
         self.dirty = true;
     }
 
@@ -126,6 +137,8 @@ impl ApplicationHandler for App {
             .map_err(|e| log::error!("surface : {e}"))
             .ok();
         self.view.shell.resume();
+        // Surface neuve : tout est à repeindre, même à géométrie égale.
+        self.laid_out = None;
         self.relayout();
         window.request_redraw();
     }
@@ -197,6 +210,7 @@ impl ApplicationHandler for App {
             return;
         }
         if self.dirty || self.last_frame.elapsed() >= FRAME {
+            self.relayout();
             self.dirty = false;
             self.last_frame = Instant::now();
             if self.view.compose() {
@@ -219,6 +233,7 @@ pub fn run(event_loop: EventLoop<()>, size: Option<(u32, u32)>) {
         size,
         window: None,
         surface: None,
+        laid_out: None,
         dirty: true,
         last_frame: Instant::now(),
         mouse: (0.0, 0.0),
