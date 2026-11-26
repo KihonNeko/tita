@@ -180,7 +180,7 @@ impl StatsScreen {
         let more = if rows > visible { t("↑↓ pour faire défiler · ", "↑↓ to scroll · ") } else { "" };
         lines.push(Line::styled(
             if ui::mobile() {
-                t("Précision sur les 30 dernières réponses", "Accuracy over the last 30 answers").to_string()
+                t("Sur les 30 dernières réponses", "Over the last 30 answers").to_string()
             } else {
                 crate::tr!(
                     "{more}Précision : 30 dernières réponses · en gris : jamais vu",

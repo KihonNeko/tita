@@ -286,16 +286,16 @@ impl Screen for Settings {
     }
 
     fn draw(&mut self, f: &mut Frame, ctx: &Ctx) {
-        let area = ui::frame(
-            f,
-            t("Réglages", "Settings"),
-            &[
-                ("↑↓", t("choisir", "select")),
-                ("←→", t("modifier", "change")),
-                (t("Espace", "Space"), t("tester le son", "test the sound")),
-                (t("Échap", "Esc"), t("enregistrer et revenir", "save and go back")),
-            ],
-        );
+        let mut hints = vec![
+            ("←→", t("modifier", "change")),
+            (t("Espace", "Space"), t("tester le son", "test the sound")),
+            (t("Échap", "Esc"), t("enregistrer et revenir", "save and go back")),
+        ];
+        if !ui::mobile() {
+            // Sur mobile on choisit un réglage en le touchant.
+            hints.insert(0, ("↑↓", t("choisir", "select")));
+        }
+        let area = ui::frame(f, t("Réglages", "Settings"), &hints);
         let current = self.item();
         let mobile = ui::mobile();
         let mut lines: Vec<Line> = Vec::new();

@@ -435,10 +435,12 @@ impl Flux {
             Span::styled(self.streak.to_string(), bold(Color::White)),
             Span::styled(
                 crate::tr!(
-                    "   {}   {} caractères",
-                    "   {}   {} characters",
+                    "   {}   {} {}",
+                    "   {}   {} {}",
                     ui::mmss(now.saturating_duration_since(self.started).as_secs()),
-                    self.total
+                    self.total,
+                    // Abrégé sur écran étroit, pour tenir sur la ligne.
+                    if ui::mobile() { t("car.", "chars") } else { t("caractères", "characters") }
                 ),
                 dim(),
             ),

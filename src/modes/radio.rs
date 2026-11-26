@@ -229,7 +229,8 @@ impl Screen for Radio {
             f.render_widget(head, Rect { height: area.height.min(1), ..area });
             let full = f.area();
             for (i, item) in TOPICS.iter().enumerate() {
-                let y = area.y + 2 + i as u16 * 4;
+                // Nom, avertissement éventuel, deux lignes de description, un vide.
+                let y = area.y + 2 + i as u16 * 5;
                 if y + 4 > area.y + area.height {
                     break;
                 }
