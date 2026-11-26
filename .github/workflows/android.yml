@@ -1,7 +1,8 @@
 name: android
 
-# Builds the Android app. Every push gives an APK to download from the run's
-# page ("Artifacts"); a version tag also attaches it to the release.
+# Builds the Android app. Every branch push replaces the "android-preview"
+# pre-release with the new APK (and keeps it under "Artifacts" on the run's
+# page); a version tag attaches it to that version's release.
 on:
   push:
     branches: ["**"]
@@ -48,6 +49,18 @@ jobs:
         with:
           name: tita-android
           path: tita-*-android.apk
+      - name: publish the preview
+        # A pre-release replaced on every branch push: one fixed link to the
+        # newest APK, easy to open from a phone. Never the "latest" release.
+        if: startsWith(github.ref, 'refs/heads/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp target/apk/tita.apk tita-android.apk
+          gh release delete android-preview --repo "${{ github.repository }}" --cleanup-tag --yes || true
+          gh release create android-preview tita-android.apk --repo "${{ github.repository }}" \
+            --prerelease --target "${{ github.sha }}" --title "tita for Android (preview)" \
+            --notes "Built from \`${{ github.ref_name }}\` at ${{ github.sha }}. Signed with a throwaway key unless the signing secrets are set: uninstall the previous preview before installing this one."
       - name: publish to the release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
