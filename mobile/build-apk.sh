@@ -84,6 +84,6 @@ export ANDROID_KEYSTORE_PASSWORD
   --ks-key-alias "${ANDROID_KEY_ALIAS:-tita}" --out "$OUT/tita.apk" "$OUT/aligned.apk"
 "$BUILD_TOOLS/apksigner" verify --print-certs "$OUT/tita.apk" | head -1
 "$BUILD_TOOLS/aapt2" dump badging "$OUT/tita.apk" \
-  | grep -E "^(package|sdkVersion|targetSdkVersion|launchable-activity|native-code|application-label):"
+  | grep -E "^(package|[a-zA-Z]*[sS]dkVersion|launchable-activity|native-code|application-label):"
 rm -f "$OUT/unaligned.apk" "$OUT/aligned.apk" "$OUT/tita.apk.idsig"
 ls -l "$OUT/tita.apk"
