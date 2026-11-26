@@ -125,6 +125,7 @@ impl ApplicationHandler for App {
             .and_then(|context| softbuffer::Surface::new(&context, window.clone()))
             .map_err(|e| log::error!("surface : {e}"))
             .ok();
+        self.view.shell.resume();
         self.relayout();
         window.request_redraw();
     }

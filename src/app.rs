@@ -282,10 +282,14 @@ impl Shell {
                 self.release(KeyEvent::new(code, KeyModifiers::NONE));
             }
         }
-        self.ctx.audio.set_key(false);
-        self.ctx.audio.stop();
+        self.ctx.audio.suspend(true);
         let _ = self.ctx.stats.save();
         let _ = self.ctx.cfg.save();
+    }
+
+    /// Retour au premier plan après `pause`.
+    pub fn resume(&mut self) {
+        self.ctx.audio.suspend(false);
     }
 
     /// Fermeture : quitte l'écran courant, coupe le son, enregistre.
@@ -374,6 +378,152 @@ pub fn render_to_string(screen: &mut dyn Screen, ctx: &Ctx, w: u16, h: u16) -> S
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::modes;
+    use crate::morse;
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+
+    /// Dessine la coquille dans une grille de téléphone et renvoie le texte.
+    fn frame(shell: &mut Shell, term: &mut Terminal<TestBackend>) -> String {
+        term.draw(|f| shell.draw(f)).unwrap();
+        let buf = term.backend().buffer().clone();
+        let mut out = String::new();
+        for y in 0..buf.area.height {
+            for x in 0..buf.area.width {
+                out.push_str(buf[(x, y)].symbol());
+            }
+            out.push('\n');
+        }
+        out
+    }
+
+    /// Touche (pose puis lève le doigt) la zone qui envoie `tap`.
+    fn tap(shell: &mut Shell, tap: Tap) {
+        let zone = ui::touch::zones().into_iter().rev().find(|z| z.tap == Some(tap)).expect("zone tactile");
+        shell.touch_down(1, zone.rect.x + zone.rect.width / 2, zone.rect.y + zone.rect.height / 2);
+        shell.touch_up(1);
+    }
+
+    fn all_screens() -> Vec<Box<dyn Screen>> {
+        vec![
+            Box::new(ui::menu::Menu::new()),
+            Box::new(modes::drill::Drill::new(false)),
+            Box::new(modes::drill::Drill::new(true)),
+            Box::new(modes::discover::Discover::new(vec!['E', 'T'])),
+            Box::new(modes::koch::Koch::new()),
+            Box::new(modes::flux::Flux::new()),
+            Box::new(modes::words::Words::new()),
+            Box::new(modes::headcopy::HeadCopy::new()),
+            Box::new(modes::radio::Radio::new()),
+            Box::new(modes::send::SendMode::new()),
+            Box::new(ui::stats_screen::StatsScreen::new()),
+            Box::new(ui::settings::Settings::new()),
+        ]
+    }
+
+    #[test]
+    fn every_screen_fits_a_phone_and_keeps_its_buttons_on_screen() {
+        ui::touch::set_mobile(true);
+        // Du petit téléphone (34 rangées) au grand, tout débloqué ou non.
+        for (h, unlocked) in [(34, 2), (41, 2), (34, morse::TABLE.len()), (41, morse::TABLE.len())] {
+            for (i, screen) in all_screens().into_iter().enumerate() {
+                let mut ctx = Ctx::test();
+                ctx.stats.set_unlocked(ctx.cfg.track, unlocked);
+                let mut shell = Shell::new(ctx, screen);
+                let mut term = Terminal::new(TestBackend::new(40, h)).unwrap();
+                frame(&mut shell, &mut term);
+                // Lance la session s'il y en a une, puis redessine.
+                shell.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+                frame(&mut shell, &mut term);
+                let zones = ui::touch::zones();
+                for z in &zones {
+                    assert!(
+                        z.rect.x + z.rect.width <= 40 && z.rect.y + z.rect.height <= h,
+                        "écran {i}, {h} rangées : {z:?} déborde"
+                    );
+                }
+                // Deux boutons visibles ne se recouvrent jamais.
+                let faces: Vec<_> = zones.iter().filter(|z| z.face != ui::Face::None).collect();
+                for (a, za) in faces.iter().enumerate() {
+                    for zb in &faces[a + 1..] {
+                        assert!(!za.rect.intersects(zb.rect), "écran {i}, {h} rangées : {za:?} / {zb:?}");
+                    }
+                }
+            }
+        }
+        ui::touch::set_mobile(false);
+    }
+
+    #[test]
+    fn a_letters_session_can_be_played_by_touch() {
+        ui::touch::set_mobile(true);
+        let mut shell = Shell::new(Ctx::test(), Box::new(ui::menu::Menu::new()));
+        let mut term = Terminal::new(TestBackend::new(40, 41)).unwrap();
+        let s = frame(&mut shell, &mut term);
+        assert!(s.contains("Lettres") && !s.contains("Quitter"), "{s}");
+
+        tap(&mut shell, Tap::Item(0));
+        let s = frame(&mut shell, &mut term);
+        assert!(s.contains("Touche l'écran") && s.contains("‹"), "{s}");
+        // Seules les lettres débloquées répondent.
+        let active = ui::touch::zones().iter().filter(|z| matches!(z.tap, Some(Tap::Key(KeyCode::Char(_))))).count();
+        assert_eq!(active, 2 + 1, "E, T et « rejouer »");
+
+        // Toucher l'écran lance la session ; une mauvaise lettre montre la bonne.
+        shell.touch_down(1, 20, 8);
+        shell.touch_up(1);
+        assert!(frame(&mut shell, &mut term).contains('?'));
+        for c in ['E', 'T'] {
+            tap(&mut shell, Tap::Key(KeyCode::Char(c)));
+            frame(&mut shell, &mut term);
+        }
+        assert!(shell.ctx.stats.chars.values().map(|c| c.seen).sum::<u32>() >= 1);
+
+        // La flèche de retour termine la session : bilan, puis menu.
+        tap(&mut shell, Tap::Key(KeyCode::Esc));
+        assert!(frame(&mut shell, &mut term).contains("Bilan"));
+        tap(&mut shell, Tap::Key(KeyCode::Enter));
+        assert!(frame(&mut shell, &mut term).contains("Lettres sans fin"));
+        assert!(shell.running());
+        ui::touch::set_mobile(false);
+    }
+
+    #[test]
+    fn the_straight_key_follows_the_finger() {
+        ui::touch::set_mobile(true);
+        let mut shell = Shell::new(Ctx::test(), Box::new(modes::send::SendMode::new()));
+        let mut term = Terminal::new(TestBackend::new(40, 41)).unwrap();
+        let s = frame(&mut shell, &mut term);
+        assert!(s.contains("MANIPULATEUR") && s.contains("point") && s.contains("trait"), "{s}");
+        let key = ui::touch::zones().into_iter().find(|z| z.tap == Some(Tap::Key(KeyCode::Char(' ')))).unwrap();
+        shell.touch_down(7, key.rect.x + 2, key.rect.y + 1);
+        assert_eq!(shell.pressed(), vec![key.rect]);
+        // Tant que le doigt reste posé, l'écran montre l'appui en cours.
+        assert!(frame(&mut shell, &mut term).contains('▮'));
+        shell.touch_up(7);
+        assert!(shell.pressed().is_empty());
+        assert!(!frame(&mut shell, &mut term).contains('▮'));
+        ui::touch::set_mobile(false);
+    }
+
+    #[test]
+    fn dragging_outside_buttons_scrolls() {
+        ui::touch::set_mobile(true);
+        let mut ctx = Ctx::test();
+        ctx.stats.record('E', Some('E'), None);
+        let mut shell = Shell::new(ctx, Box::new(ui::stats_screen::StatsScreen::new()));
+        let mut term = Terminal::new(TestBackend::new(40, 34)).unwrap();
+        frame(&mut shell, &mut term);
+        tap(&mut shell, Tap::Item(1));
+        let before = frame(&mut shell, &mut term);
+        // Le doigt remonte de cinq rangées au milieu du tableau.
+        shell.touch_down(3, 20, 20);
+        shell.touch_move(3, 20, 15);
+        shell.touch_up(3);
+        let after = frame(&mut shell, &mut term);
+        assert_ne!(before, after, "le tableau a défilé");
+        ui::touch::set_mobile(false);
+    }
 
     #[test]
     fn menu_renders() {

@@ -32,6 +32,28 @@ Or build from source with [Rust](https://rustup.rs):
 cargo install --git https://github.com/KihonNeko/tita
 ```
 
+### Android
+
+The same interface runs on Android (8.0 or later), drawn as a character grid
+and driven by touch: tappable lists, an on-screen keyboard that grows with the
+characters you unlock, and keying pads for the sending mode.
+
+Download `tita-…-android.apk` from the
+[releases page](https://github.com/KihonNeko/tita/releases) and open it on your
+phone; Android asks once for permission to install apps from that source.
+Wired headphones or the phone speaker work best: Bluetooth adds a delay that
+skews reaction times and makes the sending mode hard to use.
+
+To build it yourself, with the Android SDK and NDK installed:
+
+```
+rustup target add aarch64-linux-android armv7-linux-androideabi
+ANDROID_HOME=/path/to/sdk mobile/build-apk.sh    # -> target/apk/tita.apk
+```
+
+To try the phone layout on a computer, `cargo run -p tita-mobile` opens a
+phone-sized window where the mouse stands in for a finger.
+
 ## Use
 
 ```
@@ -92,4 +114,5 @@ Two learning orders are available in **Settings**: lessons by groups of letters
   list.
 
 Settings and progress are stored in your user config and data folders
-(`~/.config/tita` and `~/.local/share/tita` on Linux).
+(`~/.config/tita` and `~/.local/share/tita` on Linux). On Android they
+live in the app's private storage and go away if you uninstall it.

@@ -34,6 +34,7 @@ struct Shared {
     key_down: AtomicBool,                // manipulateur (mode émission)
     freq: AtomicU32,                     // Hz (f32 bits)
     volume: AtomicU32,                   // 0..1 (f32 bits)
+    suspended: AtomicBool,               // sortie native en pause (arrière-plan)
     quit: AtomicBool,
 }
 
@@ -170,8 +171,15 @@ fn start_native(sh: Arc<Shared>) -> bool {
             Some(stream)
         })();
         let _ = tx.send(stream.is_some());
-        if stream.is_some() {
+        if let Some(stream) = stream {
+            let mut paused = false;
             while !sh.quit.load(Ordering::Relaxed) {
+                // Application en arrière-plan : rendre la sortie au système.
+                let want = sh.suspended.load(Ordering::Relaxed);
+                if want != paused {
+                    let _ = if want { stream.pause() } else { stream.play() };
+                    paused = want;
+                }
                 thread::sleep(Duration::from_millis(20));
             }
         }
@@ -191,6 +199,7 @@ impl Audio {
             key_down: AtomicBool::new(false),
             freq: AtomicU32::new(freq.to_bits()),
             volume: AtomicU32::new(volume.to_bits()),
+            suspended: AtomicBool::new(false),
             quit: AtomicBool::new(false),
         });
         #[allow(unused_mut)]
@@ -281,6 +290,14 @@ impl Audio {
     /// Manipulateur : son continu tant que `down` est vrai (mode émission).
     pub fn set_key(&self, down: bool) {
         self.shared.key_down.store(down, Ordering::Relaxed);
+    }
+
+    /// Met la sortie native en pause (application en arrière-plan) ou la
+    /// relance. La file est vidée : rien ne reprend au milieu d'un caractère.
+    pub fn suspend(&self, on: bool) {
+        self.stop();
+        self.set_key(false);
+        self.shared.suspended.store(on, Ordering::Relaxed);
     }
 
     /// Attend la fin de la file (usage CLI, pas dans l'interface).
